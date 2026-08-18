@@ -28,6 +28,7 @@ This repository contains an initial, usable implementation of the core workflow:
 - guarded start, complete, cancel, release, and handoff operations
 - dependency add/remove with cycle detection for same-Epic blocking edges
 - compact Epic context summaries
+- claim attribution and stale-claim reporting
 - configuration diagnostics
 
 Shortcut REST API v4 is used throughout. Shortcut currently describes v4 as an
@@ -276,6 +277,8 @@ shortcut-agent release 456 --reason 'Agent is shutting down'
 
 ```sh
 shortcut-agent edit 456 --title 'Revised title' --description-file ./revised.md
+shortcut-agent edit 456 --move-to-epic 777
+shortcut-agent edit 456 --set-team b2c34c3a-1111-2222-3333-0123456789ab
 
 shortcut-agent dep add 456 --blocked-by 41
 shortcut-agent dep add 456 --blocks 72
@@ -283,10 +286,40 @@ shortcut-agent dep add 456 --related-to 19
 shortcut-agent dep remove 456 --blocked-by 41
 ```
 
+Scope options and mutations are deliberately separate. `--epic` selects which
+Epic a command operates on and never moves a Story; `--move-to-epic` moves it.
+The same split applies to `--team` and `--set-team`.
+
 For same-Epic blocking relationships, `dep add` builds the current graph and
 rejects an edge that would create a cycle. Cross-Epic dependencies require
 `--allow-cross-epic`; the CLI warns that it cannot prove the combined graph is
 acyclic from one Epic-scoped read.
+
+### Stale claims
+
+Because a shared token authenticates as one Shortcut member, Story ownership
+provides mutual exclusion but not agent identity. `claims` recovers that
+identity by reading the structured claim comments:
+
+```sh
+shortcut-agent claims
+shortcut-agent claims --mine
+shortcut-agent claims --stale --stale-minutes 45
+shortcut-agent claims --held-by worker-2
+```
+
+It reports every in-flight Story in the Epic — owned, or in a started state, and
+not done — with the agent that claimed it, the most recent lifecycle event, and
+how long it has been idle. `unattributed: true` marks a Story that is held but
+carries no claim comment, which happens when work is claimed outside the CLI or
+when a claim comment failed to post.
+
+`claims` is read-only. Recover a stale claim with the existing lifecycle
+command, which returns the Story to the ready pool:
+
+```sh
+shortcut-agent release 456 --reason 'Reclaiming stale claim from worker-2' --force
+```
 
 ## Agent identity
 
@@ -383,7 +416,6 @@ require a Shortcut token or network access.
 
 - `plan apply` for validating and bulk-creating a JSON/YAML Story DAG
 - optional explicitly managed `Active Agent` custom field
-- stale-claim leases and recovery reports
 - richer graph output (adjacency JSON, Mermaid, and DOT)
 - audit checks for orphaned work and cross-Epic dependency health
 - pinned v4 OpenAPI fixtures and automated schema drift checks

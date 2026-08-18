@@ -1,7 +1,7 @@
 import { access, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { configError } from "./errors.js";
-import { integer, option } from "./args.js";
+import { integer, option, text } from "./args.js";
 
 export const CONFIG_FILENAME = ".shortcut-agent.json";
 export const LOCAL_CONFIG_FILENAME = ".shortcut-agent.local.json";
@@ -51,7 +51,7 @@ export async function readConfig(filename) {
 }
 
 export async function loadConfig(options, env = process.env, cwd = process.cwd()) {
-  const filename = await findConfig(cwd, option(options, "config"));
+  const filename = await findConfig(cwd, text(options, "config"));
   const file = await readConfig(filename);
   const localCandidate = filename
     ? path.join(path.dirname(filename), LOCAL_CONFIG_FILENAME)
@@ -87,17 +87,16 @@ export async function loadConfig(options, env = process.env, cwd = process.cwd()
     filename,
     localFilename,
     apiUrl:
-      option(options, "api-url") ??
+      text(options, "api-url") ??
       env.SHORTCUT_API_URL ??
       merged.api_url ??
       "https://api.app.shortcut.com",
     token: env.SHORTCUT_API_TOKEN,
     workspace:
-      option(options, "workspace") ?? env.SHORTCUT_WORKSPACE ?? merged.workspace,
+      text(options, "workspace") ?? env.SHORTCUT_WORKSPACE ?? merged.workspace,
     epicId:
       epicValue === undefined ? undefined : integer(epicValue, "Epic ID"),
-    teamId:
-      option(options, "team") ?? env.SHORTCUT_TEAM_ID ?? merged.team_id,
+    teamId: text(options, "team") ?? env.SHORTCUT_TEAM_ID ?? merged.team_id,
     agentId,
     agentSource,
     runId: env.SHORTCUT_AGENT_RUN_ID,

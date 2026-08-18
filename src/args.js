@@ -101,6 +101,11 @@ export function flag(options, key, fallback = false) {
   return Boolean(value);
 }
 
+export function text(options, key, fallback) {
+  const value = option(options, key, fallback);
+  return typeof value === "boolean" ? fallback : value;
+}
+
 export function values(options, key) {
   const raw = options[key];
   if (raw === undefined || raw === false) return [];
@@ -115,6 +120,9 @@ export function integer(value, label, { required = false } = {}) {
   if (value === undefined || value === null || value === "") {
     if (required) throw argumentError(`${label} is required`);
     return undefined;
+  }
+  if (typeof value === "boolean") {
+    throw argumentError(`${label} requires a value`);
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {

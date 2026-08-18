@@ -7,6 +7,7 @@ import {
   option,
   requirePositional,
   storyIds,
+  text,
 } from "./args.js";
 import {
   requireAgent,
@@ -424,8 +425,17 @@ async function editCommand(parsed, { client, config, stdin }) {
     body.estimate = integer(option(parsed.options, "estimate"), "--estimate");
   }
   if (flag(parsed.options, "clear-estimate")) body.estimate = null;
-  if (option(parsed.options, "epic") !== undefined) body.epic_id = requireEpic(config);
-  if (option(parsed.options, "team") !== undefined) body.team_id = config.teamId;
+  const moveToEpic = option(parsed.options, "move-to-epic");
+  if (moveToEpic !== undefined) {
+    body.epic_id = integer(moveToEpic, "--move-to-epic", { required: true });
+  }
+  if (option(parsed.options, "set-team") !== undefined) {
+    const requested = text(parsed.options, "set-team") ?? config.teamId;
+    if (!requested) {
+      throw argumentError("--set-team requires a Team UUID or a configured team");
+    }
+    body.team_id = requested;
+  }
   if (flag(parsed.options, "clear-team")) body.team_id = null;
   if (option(parsed.options, "state") !== undefined) {
     body.workflow_state_id = integer(option(parsed.options, "state"), "--state");
@@ -723,6 +733,93 @@ async function dependencyCommand(parsed, { client, config }) {
   };
 }
 
+function nonNegativeInteger(value, label) {
+  const parsed = Number(value);
+  if (typeof value === "boolean" || !Number.isSafeInteger(parsed) || parsed < 0) {
+    throw argumentError(`${label} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
+function latestEvent(events, predicate = () => true) {
+  let found;
+  for (const event of events) {
+    if (!predicate(event)) continue;
+    if (!found || String(event.timestamp) > String(found.timestamp)) found = event;
+  }
+  return found;
+}
+
+function claimSummary(story, index, comments, { now, staleMinutes }) {
+  const events = comments
+    .map((comment) => parseAgentEvent(comment.text))
+    .filter(Boolean);
+  const claim = latestEvent(events, (event) => event.event === "claim");
+  const last = latestEvent(events);
+  const activityAt = last?.timestamp ?? story.updated_at;
+  const parsed = activityAt ? Date.parse(activityAt) : Number.NaN;
+  const idleMinutes = Number.isFinite(parsed)
+    ? Math.max(0, Math.round((now - parsed) / 60000))
+    : undefined;
+  return {
+    story: summarizeStory(story, index),
+    agent_id: claim?.agent_id ?? null,
+    run_id: claim?.run_id ?? null,
+    claimed_at: claim?.timestamp ?? null,
+    last_event: last
+      ? {
+          event: last.event,
+          timestamp: last.timestamp,
+          agent_id: last.agent_id,
+          run_id: last.run_id,
+        }
+      : null,
+    idle_minutes: idleMinutes ?? null,
+    stale: idleMinutes === undefined ? false : idleMinutes >= staleMinutes,
+    unattributed: !claim,
+  };
+}
+
+async function claimsCommand(parsed, { client, config }) {
+  const { epicId, stories, index } = await epicStories(client, config);
+  const staleOption = option(parsed.options, "stale-minutes");
+  const staleMinutes =
+    staleOption === undefined
+      ? 60
+      : nonNegativeInteger(staleOption, "--stale-minutes");
+  const heldBy = flag(parsed.options, "mine")
+    ? requireAgent(config)
+    : text(parsed.options, "held-by");
+  const onlyStale = flag(parsed.options, "stale");
+
+  const inFlight = sortStories(stories).filter((story) => {
+    const state = storyState(story, index);
+    if (state.type === "done" || story.archived) return false;
+    return owners(story).length > 0 || state.type === "started";
+  });
+
+  const now = Date.now();
+  const claims = await Promise.all(
+    inFlight.map(async (story) =>
+      claimSummary(story, index, await client.listStoryComments(story.id), {
+        now,
+        staleMinutes,
+      }),
+    ),
+  );
+
+  return {
+    ok: true,
+    command: "claims",
+    epic_id: epicId,
+    stale_minutes: staleMinutes,
+    generated_at: new Date(now).toISOString(),
+    claims: claims
+      .filter((claim) => (heldBy ? claim.agent_id === heldBy : true))
+      .filter((claim) => (onlyStale ? claim.stale : true)),
+  };
+}
+
 async function contextCommand(_parsed, { client, config }) {
   const { epicId, stories, index } = await epicStories(client, config);
   const epic = await client.getEpic(epicId);
@@ -766,6 +863,7 @@ export async function executeCommand(parsed, context) {
   }
   if (command === "handoff") return handoffCommand(parsed, context);
   if (command === "dep") return dependencyCommand(parsed, context);
+  if (command === "claims") return claimsCommand(parsed, context);
   if (command === "context") return contextCommand(parsed, context);
   throw argumentError(`Unknown command: ${command ?? "(none)"}`);
 }

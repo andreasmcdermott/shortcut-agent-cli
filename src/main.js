@@ -30,6 +30,7 @@ Usage:
   shortcut-agent release STORY --reason TEXT
   shortcut-agent handoff STORY --summary TEXT [--release]
   shortcut-agent dep add|remove STORY --blocked-by|--blocks|--related-to OTHER
+  shortcut-agent claims [--mine|--held-by ID] [--stale] [--stale-minutes N]
   shortcut-agent context
 
 Global options:
@@ -43,6 +44,11 @@ Global options:
   --pretty            Indented JSON output
   -h, --help          Show help
   -V, --version       Show version
+
+Edit mutations (distinct from the scope options above):
+  --move-to-epic ID   Move the Story to another Epic
+  --set-team [UUID]   Set the Story team, defaulting to the configured team
+  --clear-team        Remove the Story team
 
 Create relations:
   --blocked-by ID     Existing Story blocks this Story (repeatable)
@@ -71,6 +77,17 @@ function formatHuman(payload) {
       ...payload.active.map((story) => `ACTIVE ${humanStory(story)}`),
       ...payload.blocked.map((story) => `BLOCKED ${humanStory(story)}`),
     ].join("\n");
+  }
+  if (payload.command === "claims") {
+    if (!payload.claims.length) return `No matching claims in Epic ${payload.epic_id}.`;
+    return payload.claims
+      .map((claim) => {
+        const holder = claim.agent_id ?? "unattributed";
+        const idle = claim.idle_minutes === null ? "?" : `${claim.idle_minutes}m`;
+        const marker = claim.stale ? " STALE" : "";
+        return `${humanStory(claim.story)} held by ${holder}, idle ${idle}${marker}`;
+      })
+      .join("\n");
   }
   if (payload.command === "doctor") {
     return payload.ok

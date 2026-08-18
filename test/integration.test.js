@@ -310,3 +310,86 @@ test("dependency addition is directional and idempotent", async (t) => {
   );
   assert.equal(creates.length, 1);
 });
+
+test("a bare --epic is rejected instead of silently targeting Epic 1", async (t) => {
+  const setup = await fixture(t);
+  const result = await invoke(["list", "--epic"], setup);
+  assert.equal(result.exitCode, 2);
+  const error = JSON.parse(result.stderr).error;
+  assert.equal(error.code, "invalid_arguments");
+  assert.match(error.message, /requires a value/);
+  assert.equal(
+    setup.mock.requests.some((request) => request.path.includes("/epics/1/")),
+    false,
+    "must not have queried Epic 1",
+  );
+});
+
+test("edit does not move a Story when --epic is used as a scope override", async (t) => {
+  const setup = await fixture(t);
+  const result = await invoke(
+    ["edit", "1", "--epic", "99", "--title", "Renamed"],
+    setup,
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const patch = setup.mock.requests.find(
+    (request) => request.method === "PATCH" && request.path.endsWith("/stories/1"),
+  );
+  assert.equal(patch.body.name, "Renamed");
+  assert.equal("epic_id" in patch.body, false, "scope flag must not mutate the Epic");
+});
+
+test("edit moves a Story only through the explicit --move-to-epic flag", async (t) => {
+  const setup = await fixture(t);
+  const result = await invoke(["edit", "1", "--move-to-epic", "77"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const patch = setup.mock.requests.find(
+    (request) => request.method === "PATCH" && request.path.endsWith("/stories/1"),
+  );
+  assert.equal(patch.body.epic_id, 77);
+});
+
+test("claims attributes an in-flight Story to the agent that claimed it", async (t) => {
+  const setup = await fixture(t);
+  await invoke(["start", "1"], setup);
+  const result = await invoke(["claims"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.json.claims.length, 1);
+  const claim = result.json.claims[0];
+  assert.equal(claim.story.id, 1);
+  assert.equal(claim.agent_id, "worker-1");
+  assert.equal(claim.unattributed, false);
+  assert.equal(claim.stale, false);
+  assert.ok(claim.claimed_at);
+});
+
+test("claims marks work stale against the configured threshold", async (t) => {
+  const setup = await fixture(t);
+  await invoke(["start", "1"], setup);
+  const fresh = await invoke(["claims", "--stale"], setup);
+  assert.deepEqual(fresh.json.claims, []);
+  const stale = await invoke(["claims", "--stale", "--stale-minutes", "0"], setup);
+  assert.equal(stale.json.claims.length, 1);
+  assert.equal(stale.json.claims[0].stale, true);
+});
+
+test("claims filters by holder so an agent can recover its own work", async (t) => {
+  const setup = await fixture(t);
+  await invoke(["start", "1"], setup);
+  const mine = await invoke(["claims", "--mine"], setup);
+  assert.deepEqual(mine.json.claims.map((claim) => claim.story.id), [1]);
+  const others = await invoke(["claims", "--held-by", "worker-9"], setup);
+  assert.deepEqual(others.json.claims, []);
+});
+
+test("claims surfaces owned Stories that carry no claim comment", async (t) => {
+  const setup = await fixture(t);
+  setup.mock.stories.get(2).owners = {
+    entities: [{ id: "member-1", name: "Test Member" }],
+  };
+  const result = await invoke(["claims"], setup);
+  const claim = result.json.claims.find((entry) => entry.story.id === 2);
+  assert.ok(claim, "owned Story must be reported");
+  assert.equal(claim.unattributed, true);
+  assert.equal(claim.agent_id, null);
+});
