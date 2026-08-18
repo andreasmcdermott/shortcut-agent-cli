@@ -15,6 +15,7 @@ import {
   requireToken,
   writeConfig,
   CONFIG_FILENAME,
+  LOCAL_CONFIG_FILENAME,
 } from "./config.js";
 import { createAgentEvent, parseAgentEvent } from "./comments.js";
 import {
@@ -169,12 +170,10 @@ export async function initCommand(parsed, context) {
       states: candidates.map(({ id, name, type }) => ({ id, name, type })),
     });
   }
-  const agentId = requireAgent(config);
   const document = {
     workspace,
     epic_id: Number(epic.id),
     ...(config.teamId ? { team_id: config.teamId } : {}),
-    agent_id: agentId,
     states: {
       ready: Number(ready),
       started: Number(started),
@@ -187,13 +186,34 @@ export async function initCommand(parsed, context) {
     config.filename ??
     path.join(cwd, CONFIG_FILENAME);
   const written = await writeConfig(filename, document);
+  const requestedAgent = option(parsed.options, "agent");
+  const agentToPersist =
+    requestedAgent ??
+    (config.agentSource === "project-config" ? config.agentId : undefined);
+  let localWritten;
+  if (agentToPersist !== undefined) {
+    if (agentToPersist === true || !String(agentToPersist).trim()) {
+      throw argumentError("--agent must not be empty");
+    }
+    const localTarget = path.join(path.dirname(written), LOCAL_CONFIG_FILENAME);
+    const existingLocal =
+      config.localFilename && path.resolve(config.localFilename) === path.resolve(localTarget)
+        ? config.localRaw
+        : {};
+    localWritten = await writeConfig(localTarget, {
+      ...existingLocal,
+      agent_id: String(agentToPersist),
+    });
+  }
   return {
     ok: true,
     command: "init",
     config_file: written,
     workspace,
     epic: { id: Number(epic.id), name: epic.name },
-    agent_id: agentId,
+    ...(localWritten
+      ? { local_config_file: localWritten, agent_id: String(agentToPersist) }
+      : {}),
     states: document.states,
   };
 }
@@ -203,12 +223,14 @@ async function configCommand(_parsed, { config }) {
     ok: true,
     command: "config",
     config_file: config.filename,
+    local_config_file: config.localFilename,
     api_url: config.apiUrl,
     token_configured: Boolean(config.token),
     workspace: config.workspace,
     epic_id: config.epicId,
     team_id: config.teamId,
     agent_id: config.agentId,
+    agent_id_source: config.agentSource,
     states: config.states,
   };
 }
@@ -244,6 +266,7 @@ async function doctorCommand(_parsed, { client, config }) {
     member: whoami.member,
     epic: { id: Number(epic.id), name: epic.name },
     agent_id: config.agentId,
+    agent_id_source: config.agentSource,
     states: Object.fromEntries(
       Object.entries(configured).map(([name, state]) => [
         name,

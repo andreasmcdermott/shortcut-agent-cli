@@ -250,7 +250,7 @@ test("init discovers workspace and semantic workflow states", async (t) => {
   t.after(() => mock.instance.close());
   const directory = await mkdtemp(path.join(tmpdir(), "shortcut-agent-init-test-"));
   const result = await invoke(
-    ["init", "--epic", "99", "--agent", "worker-7"],
+    ["init", "--epic", "99"],
     {
       directory,
       env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl },
@@ -261,8 +261,34 @@ test("init discovers workspace and semantic workflow states", async (t) => {
     await readFile(path.join(directory, ".shortcut-agent.json"), "utf8"),
   );
   assert.equal(config.workspace, "acme");
-  assert.equal(config.agent_id, "worker-7");
+  assert.equal(Object.hasOwn(config, "agent_id"), false);
   assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  await assert.rejects(
+    readFile(path.join(directory, ".shortcut-agent.local.json"), "utf8"),
+    { code: "ENOENT" },
+  );
+});
+
+test("init stores an explicitly requested agent only in ignored local config", async (t) => {
+  const mock = await mockShortcut();
+  t.after(() => mock.instance.close());
+  const directory = await mkdtemp(path.join(tmpdir(), "shortcut-agent-local-init-test-"));
+  const result = await invoke(
+    ["init", "--epic", "99", "--agent", "worker-7"],
+    {
+      directory,
+      env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl },
+    },
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const shared = JSON.parse(
+    await readFile(path.join(directory, ".shortcut-agent.json"), "utf8"),
+  );
+  const local = JSON.parse(
+    await readFile(path.join(directory, ".shortcut-agent.local.json"), "utf8"),
+  );
+  assert.equal(Object.hasOwn(shared, "agent_id"), false);
+  assert.equal(local.agent_id, "worker-7");
 });
 
 test("dependency addition is directional and idempotent", async (t) => {

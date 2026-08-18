@@ -15,7 +15,7 @@ const HELP = `shortcut-agent ${VERSION}
 Agent-first Shortcut work coordination.
 
 Usage:
-  shortcut-agent init --epic ID --agent ID [state options]
+  shortcut-agent init --epic ID [--agent LOCAL_DEFAULT] [state options]
   shortcut-agent config
   shortcut-agent doctor
   shortcut-agent create --title TITLE --description TEXT [relations]

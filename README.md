@@ -82,17 +82,17 @@ either explicitly or from `.shortcut-agent.json`.
 Run `init` from the repository or project directory that should use an Epic:
 
 ```sh
-shortcut-agent init --epic 12345 --agent codex-worker-1
+shortcut-agent init --epic 12345
 ```
 
 `init` calls v4 `whoami`, discovers the workspace slug and workflow states, and
-writes `.shortcut-agent.json`. It chooses state IDs by semantic state type rather
-than assuming state names. Explicit state IDs can override discovery:
+writes the shared project scope to `.shortcut-agent.json`. It chooses state IDs
+by semantic state type rather than assuming state names. Explicit state IDs can
+override discovery:
 
 ```sh
 shortcut-agent init \
   --epic 12345 \
-  --agent codex-worker-1 \
   --ready-state 500000001 \
   --started-state 500000002 \
   --done-state 500000003 \
@@ -106,7 +106,6 @@ Example configuration:
   "workspace": "acme",
   "epic_id": 12345,
   "team_id": "b2c34c3a-1111-2222-3333-0123456789ab",
-  "agent_id": "codex-worker-1",
   "states": {
     "ready": 500000001,
     "started": 500000002,
@@ -116,18 +115,39 @@ Example configuration:
 }
 ```
 
-The config file is discovered by walking from the current directory toward the
-filesystem root. Use `--config PATH` to select one explicitly.
+The project config is discovered by walking from the current directory toward
+the filesystem root. Use `--config PATH` to select one explicitly. When present,
+an adjacent `.shortcut-agent.local.json` is layered over it and is ignored by
+Git. This provides a personal fallback without putting identity in shared config.
 
-The config contains no credential and may be committed when a repository always
-maps to the same Epic. In a shared checkout, omit or override `agent_id` with
-`SHORTCUT_AGENT_ID` so parallel workers do not all inherit one identity.
+The project config contains no credential or agent identity and may be committed
+when a repository always maps to the same Epic. To save a local default agent,
+pass it explicitly during initialization:
+
+```sh
+shortcut-agent init --epic 12345 --agent codex-worker-1
+```
+
+This still writes the shared scope to `.shortcut-agent.json`, but writes the
+identity separately:
+
+```json
+{
+  "agent_id": "codex-worker-1"
+}
+```
+
+For parallel agents in the same folder, do not use one local default. Give each
+process its own `SHORTCUT_AGENT_ID` and `SHORTCUT_AGENT_RUN_ID` instead.
+Rerunning `init` against an older project config migrates its legacy `agent_id`
+into the ignored local file.
 
 Configuration precedence is:
 
 1. command-line option
 2. environment variable
-3. `.shortcut-agent.json`
+3. `.shortcut-agent.local.json`
+4. `.shortcut-agent.json`
 
 Supported environment variables:
 
@@ -273,7 +293,7 @@ acyclic from one Epic-scoped read.
 Three IDs serve different lifetimes:
 
 - `agent_id`: stable logical worker identity, configured with `--agent`,
-  `SHORTCUT_AGENT_ID`, or `agent_id` in project config
+  `SHORTCUT_AGENT_ID`, or the ignored local config
 - `run_id`: orchestrator session/thread identity, preferably supplied through
   `SHORTCUT_AGENT_RUN_ID`; otherwise generated per command
 - event/claim ID: a UUID generated for one lifecycle mutation
@@ -281,7 +301,8 @@ Three IDs serve different lifetimes:
 Parallel orchestrators should provide stable worker-slot agent IDs such as
 `worker-1` and `worker-2`, and unique run IDs for individual sessions. Random
 run IDs are stored only in comments and therefore do not create an ever-growing
-workspace schema.
+workspace schema. Agents sharing one folder can safely share the project config;
+their process-level identity overrides keep attribution separate.
 
 ## Output and errors
 
@@ -345,7 +366,9 @@ require a Shortcut token or network access.
 
 ## Security and operational notes
 
-- Never commit `SHORTCUT_API_TOKEN` or put it in `.shortcut-agent.json`.
+- Never commit `SHORTCUT_API_TOKEN` or put it in either config file.
+- `.shortcut-agent.local.json` is ignored because it may contain a personal
+  default identity; `.shortcut-agent.json` is safe to share.
 - A v4 read/write token acts as its Shortcut member; shared tokens also share the
   same Story owner identity.
 - Comments identify the agent run but are not locks and are not used as the sole
