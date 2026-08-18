@@ -1,0 +1,21 @@
+{
+  "name": "shortcut-agent-cli",
+  "version": "0.1.0",
+  "description": "An agent-first Shortcut workflow CLI",
+  "type": "module",
+  "bin": {
+    "shortcut-agent": "./bin/shortcut-agent.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check bin/shortcut-agent.js && node --check src/*.js && node --check test/*.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}
