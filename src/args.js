@@ -15,6 +15,8 @@ const BOOLEAN_OPTIONS = new Set([
   "clear-estimate",
   "clear-team",
   "force",
+  "merge",
+  "update-discovered",
   "release",
   "allow-cross-epic",
 ]);

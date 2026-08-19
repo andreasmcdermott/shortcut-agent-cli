@@ -88,7 +88,9 @@ export async function run(
       return 0;
     }
 
-    const config = await loadConfig(parsed.options, env, cwd);
+    const config = await loadConfig(parsed.options, env, cwd, {
+      forInit: parsed.command === "init",
+    });
     const makeClient = ({ workspace = config.workspace } = {}) =>
       new ShortcutClient({
         token: requireToken(config),
@@ -103,7 +105,7 @@ export async function run(
       requireWorkspace(config);
       client = makeClient();
     }
-    const payload = await executeCommand(parsed, {
+    const commandPayload = await executeCommand(parsed, {
       config,
       client,
       makeClient,
@@ -111,6 +113,11 @@ export async function run(
       stdin,
       env,
     });
+    const payload = {
+      ...commandPayload,
+      config_file: commandPayload.config_file ?? config.filename ?? null,
+      config_source: commandPayload.config_source ?? config.source,
+    };
     if (flag(parsed.options, "human")) stdout.write(`${formatHuman(payload)}\n`);
     else writeJson(stdout, payload, flag(parsed.options, "pretty"));
     return payload.ok === false && parsed.command === "doctor" ? 3 : 0;

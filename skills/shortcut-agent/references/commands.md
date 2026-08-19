@@ -31,6 +31,7 @@ cannot silently retarget the command.
 | Variable | Purpose |
 | --- | --- |
 | `SHORTCUT_API_TOKEN` | Required v4 read/write token (`sct_rw_...`) |
+| `SHORTCUT_AGENT_CONFIG` | Explicit config path (`--config` wins) |
 | `SHORTCUT_API_URL` | API base URL override |
 | `SHORTCUT_WORKSPACE` | Workspace slug |
 | `SHORTCUT_EPIC_ID` | Default Epic |
@@ -45,8 +46,10 @@ The token is never written to either config file.
 ### `init --epic ID`
 
 Calls v4 `whoami`, discovers workspace slug and workflow states **by state type**
-(not by name), and writes `.shortcut-agent.json`. Prefers states in the member's
-default workflow.
+(not by name), and writes `.shortcut-agent.json` in cwd. `init` does not reuse an
+ancestor config unless `--update-discovered` is supplied. `--config PATH` and
+`SHORTCUT_AGENT_CONFIG` may point to a new file for `init`; read commands require
+the selected file to exist.
 
 Workflow selection follows the Epic, not the caller: `--workflow ID`, else the
 default workflow of `--team`, else the Epic's own team's default workflow, else
@@ -62,17 +65,27 @@ State discovery within that workflow: `ready` ← first `unstarted`, else
 /cancel|won't|wont|abandon/i, else falls back to `done`.
 
 Overrides: `--workflow ID`, `--team UUID`, `--ready-state ID`,
-`--started-state ID`, `--done-state ID`, `--cancelled-state ID`. Fails with exit 3 if ready/started/done cannot be
-resolved.
+`--started-state ID`, `--done-state ID`, `--cancelled-state ID`. Fails with exit
+3 if ready/started/done cannot be resolved.
 
-`--agent ID` writes identity to `.shortcut-agent.local.json` (git-ignored), not
-to the shared config. Re-running `init` migrates a legacy `agent_id` out of the
-shared file.
+Initialization is create-only by default. A differing existing target is left
+untouched and reported with exit 3. `--merge` refreshes all known scope/state
+fields while preserving extra keys; `--force` replaces the document. Use
+explicit state overrides to pin individual state IDs. `--update-discovered`
+opts into targeting the bounded discovered ancestor config rather than cwd.
+
+`--agent ID` writes identity to `.shortcut-agent.local.json`, not to the shared
+config. `init` warns if Git does not report the local file ignored. Re-running
+with `--merge` or `--force` migrates a legacy `agent_id` out of the shared file.
 
 ### `config` / `doctor`
 
 `config` prints effective resolved configuration and where each value came from.
-`doctor` runs connectivity and configuration diagnostics.
+Every successful command reports `config_file` plus `config_source` (`cwd`,
+`ancestor`, `explicit`, `env`, or `none`). Discovery stops at the first `.git`
+boundary (including linked-worktree `.git` files). Outside Git it stops at home
+for paths beneath home, and checks only cwd for paths elsewhere. `doctor` runs
+connectivity and configuration diagnostics.
 
 ## Reading
 

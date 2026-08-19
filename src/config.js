@@ -1,10 +1,28 @@
-import { access, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  link,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
-import { configError } from "./errors.js";
-import { integer, option, text } from "./args.js";
+import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual, promisify } from "node:util";
+import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
+import { configError, argumentError } from "./errors.js";
+import { flag, integer, option, text } from "./args.js";
 
 export const CONFIG_FILENAME = ".shortcut-agent.json";
 export const LOCAL_CONFIG_FILENAME = ".shortcut-agent.local.json";
+
+const execFileAsync = promisify(execFile);
 
 async function exists(filename) {
   try {
@@ -15,34 +33,68 @@ async function exists(filename) {
   }
 }
 
-export async function findConfig(startDirectory = process.cwd(), explicitPath) {
-  if (explicitPath) return path.resolve(explicitPath);
+function sourceFor(filename, cwd) {
+  return path.dirname(filename) === path.resolve(cwd) ? "cwd" : "ancestor";
+}
+
+function isWithin(directory, candidate) {
+  const relative = path.relative(directory, candidate);
+  return (
+    relative === "" ||
+    (relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative))
+  );
+}
+
+async function discoveryBoundary(startDirectory) {
+  const start = path.resolve(startDirectory);
+  let directory = start;
+  while (true) {
+    if (await exists(path.join(directory, ".git"))) return directory;
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  const home = path.resolve(homedir());
+  return isWithin(home, start) ? home : start;
+}
+
+async function discoverConfig(startDirectory) {
   let directory = path.resolve(startDirectory);
+  const boundary = await discoveryBoundary(directory);
   while (true) {
     const candidate = path.join(directory, CONFIG_FILENAME);
     if (await exists(candidate)) return candidate;
-    const parent = path.dirname(directory);
-    if (parent === directory) return undefined;
-    directory = parent;
+    if (directory === boundary) return undefined;
+    directory = path.dirname(directory);
   }
 }
 
-export async function readConfig(filename) {
-  if (!filename) return {};
-  let text;
+export async function findConfig(startDirectory = process.cwd(), explicitPath) {
+  if (explicitPath) return path.resolve(startDirectory, explicitPath);
+  return discoverConfig(startDirectory);
+}
+
+async function readConfigResult(filename, { mayNotExist = false } = {}) {
+  if (!filename) return { value: {}, exists: false };
+  let content;
   try {
-    text = await readFile(filename, "utf8");
+    content = await readFile(filename, "utf8");
   } catch (error) {
+    if (mayNotExist && error.code === "ENOENT") {
+      return { value: {}, exists: false };
+    }
     throw configError(`Could not read config: ${filename}`, {
       reason: error.message,
     });
   }
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(content);
     if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
       throw new Error("configuration must be a JSON object");
     }
-    return parsed;
+    return { value: parsed, exists: true };
   } catch (error) {
     throw configError(`Invalid JSON config: ${filename}`, {
       reason: error.message,
@@ -50,9 +102,58 @@ export async function readConfig(filename) {
   }
 }
 
-export async function loadConfig(options, env = process.env, cwd = process.cwd()) {
-  const filename = await findConfig(cwd, text(options, "config"));
-  const file = await readConfig(filename);
+export async function readConfig(filename, options) {
+  return (await readConfigResult(filename, options)).value;
+}
+
+function explicitConfig(options, env, cwd) {
+  const commandValue = option(options, "config");
+  if (commandValue === true) {
+    throw argumentError("--config requires a value");
+  }
+  if (commandValue !== undefined && commandValue !== false) {
+    return { filename: path.resolve(cwd, String(commandValue)), source: "explicit" };
+  }
+  if (env.SHORTCUT_AGENT_CONFIG) {
+    return {
+      filename: path.resolve(cwd, env.SHORTCUT_AGENT_CONFIG),
+      source: "env",
+    };
+  }
+  return undefined;
+}
+
+export async function loadConfig(
+  options,
+  env = process.env,
+  cwd = process.cwd(),
+  { forInit = false } = {},
+) {
+  const explicit = explicitConfig(options, env, cwd);
+  let resolution = explicit;
+
+  if (!resolution && forInit && !flag(options, "update-discovered")) {
+    resolution = {
+      filename: path.join(path.resolve(cwd), CONFIG_FILENAME),
+      source: "cwd",
+    };
+  }
+  if (!resolution) {
+    const discovered = await discoverConfig(cwd);
+    if (discovered) {
+      resolution = { filename: discovered, source: sourceFor(discovered, cwd) };
+    } else if (forInit) {
+      resolution = {
+        filename: path.join(path.resolve(cwd), CONFIG_FILENAME),
+        source: "cwd",
+      };
+    }
+  }
+
+  const filename = resolution?.filename;
+  const fileResult = await readConfigResult(filename, { mayNotExist: forInit });
+  const file = fileResult.value;
+  const fileExists = fileResult.exists;
   const localCandidate = filename
     ? path.join(path.dirname(filename), LOCAL_CONFIG_FILENAME)
     : undefined;
@@ -85,6 +186,8 @@ export async function loadConfig(options, env = process.env, cwd = process.cwd()
     option(options, "epic") ?? env.SHORTCUT_EPIC_ID ?? merged.epic_id;
   const config = {
     filename,
+    source: resolution?.source ?? "none",
+    exists: fileExists,
     localFilename,
     apiUrl:
       text(options, "api-url") ??
@@ -161,13 +264,126 @@ export function requireState(config, name) {
   return value;
 }
 
-export async function writeConfig(filename, config) {
-  const target = path.resolve(
+async function acquireWriteLock(target) {
+  const lockFilename = `${target}.lock`;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    try {
+      const handle = await open(lockFilename, "wx", 0o600);
+      try {
+        await handle.writeFile(`${process.pid}\n`);
+      } catch (error) {
+        await handle.close().catch(() => {});
+        await rm(lockFilename, { force: true }).catch(() => {});
+        throw error;
+      }
+      return async () => {
+        await handle.close().catch(() => {});
+        await rm(lockFilename, { force: true }).catch(() => {});
+      };
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      try {
+        const lockStat = await stat(lockFilename);
+        if (Date.now() - lockStat.mtimeMs > 30_000) {
+          const staleFilename = `${lockFilename}.${randomUUID()}.stale`;
+          try {
+            await rename(lockFilename, staleFilename);
+            await rm(staleFilename, { force: true });
+          } catch (renameError) {
+            if (renameError.code !== "ENOENT") throw renameError;
+          }
+          continue;
+        }
+      } catch (statError) {
+        if (statError.code === "ENOENT") continue;
+        throw statError;
+      }
+      await delay(25);
+    }
+  }
+  throw configError(`Timed out waiting to write config: ${target}`, {
+    config_file: target,
+  });
+}
+
+export async function writeConfig(
+  filename,
+  config,
+  { overwrite = true, expected } = {},
+) {
+  const requestedTarget = path.resolve(
     filename ?? path.join(process.cwd(), CONFIG_FILENAME),
   );
-  await writeFile(target, `${JSON.stringify(config, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o644,
-  });
-  return target;
+  const releaseLock = await acquireWriteLock(requestedTarget);
+  let temporary;
+  try {
+    let target = requestedTarget;
+    if (overwrite) {
+      try {
+        target = await realpath(requestedTarget);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+    }
+    let mode = 0o644;
+    if (overwrite) {
+      try {
+        mode = (await stat(target)).mode & 0o7777;
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+    }
+    temporary = path.join(
+      path.dirname(target),
+      `.${path.basename(target)}.${process.pid}.${randomUUID()}.tmp`,
+    );
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, {
+      encoding: "utf8",
+      mode,
+      flag: "wx",
+    });
+    await chmod(temporary, mode);
+    if (overwrite) {
+      if (expected !== undefined) {
+        const current = await readConfig(requestedTarget);
+        if (!isDeepStrictEqual(current, expected)) {
+          throw configError(`Config changed while init was running: ${requestedTarget}`, {
+            config_file: requestedTarget,
+          });
+        }
+      }
+      await rename(temporary, target);
+    } else {
+      try {
+        await link(temporary, requestedTarget);
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          throw configError(
+            `Config appeared while init was running: ${requestedTarget}`,
+            { config_file: requestedTarget },
+          );
+        }
+        throw error;
+      }
+      await rm(temporary);
+    }
+    temporary = undefined;
+    return requestedTarget;
+  } finally {
+    if (temporary) await rm(temporary, { force: true }).catch(() => {});
+    await releaseLock();
+  }
+}
+
+export async function isGitIgnored(filename) {
+  try {
+    await execFileAsync(
+      "git",
+      ["-C", path.dirname(filename), "check-ignore", "--quiet", "--", filename],
+      { windowsHide: true },
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
