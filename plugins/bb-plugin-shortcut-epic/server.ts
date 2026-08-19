@@ -15,7 +15,7 @@ const CONFIG_FILENAME = ".shortcut-agent.json";
 const configSchema = z
   .object({
     workspace: z.string().min(1),
-    epic_id: z.coerce.number().int().positive(),
+    epic_id: z.coerce.number().int().positive().optional(),
     api_url: z.string().url().optional(),
   })
   .passthrough();
@@ -60,6 +60,7 @@ const graphResponseSchema = z.object({
   nodes: z.array(graphNodeSchema),
   edges: z.array(graphEdgeSchema),
   warnings: z.array(z.string()),
+  configuredEpicId: z.number().int().nullable(),
   generatedAt: z.string(),
 });
 
@@ -67,14 +68,19 @@ export type GraphResponse = z.infer<typeof graphResponseSchema>;
 
 export const rpcContract = defineRpcContract({
   loadGraph: {
-    input: z.object({ projectId: z.string().nullable() }).strict(),
+    input: z
+      .object({
+        projectId: z.string().nullable(),
+        epicId: z.number().int().positive().nullable().optional(),
+      })
+      .strict(),
     output: graphResponseSchema,
   },
 });
 
 interface ProjectConfig {
   workspace: string;
-  epic_id: number;
+  epic_id?: number;
   api_url?: string;
 }
 
@@ -203,7 +209,7 @@ async function resolveConfiguredProject(
     );
   }
   throw new Error(
-    `Multiple bb projects contain ${CONFIG_FILENAME}. Select the default project in Extensions → Plugins → Shortcut Epic.`,
+    `Multiple bb projects contain ${CONFIG_FILENAME}. Select the default project in Extensions → Plugins → Shortcut Agent.`,
   );
 }
 
@@ -238,21 +244,27 @@ export default async function plugin(bb: BbPluginApi) {
   const initial = await settings.get();
   if (!initial.apiToken && !process.env.SHORTCUT_API_TOKEN) {
     bb.status.needsConfiguration(
-      "Set the Shortcut API token in Extensions → Plugins → Shortcut Epic.",
+      "Set the Shortcut API token in Extensions → Plugins → Shortcut Agent.",
     );
   }
 
   bb.rpc.register(rpcContract, {
-    async loadGraph({ projectId }) {
+    async loadGraph({ projectId, epicId }) {
       const current = await settings.get();
       const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
       if (!token) {
         throw new Error(
-          "Shortcut API token is not configured. Set it in Extensions → Plugins → Shortcut Epic.",
+          "Shortcut API token is not configured. Set it in Extensions → Plugins → Shortcut Agent.",
         );
       }
 
       const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const selectedEpicId = epicId ?? configured.config.epic_id;
+      if (!selectedEpicId) {
+        throw new Error(
+          "No Epic is selected. Enter an Epic ID in the panel or add epic_id to .shortcut-agent.json.",
+        );
+      }
       const client = new ShortcutClient({
         token,
         workspace: configured.config.workspace,
@@ -263,8 +275,8 @@ export default async function plugin(bb: BbPluginApi) {
       });
 
       const [epic, stories, workflowStates] = await Promise.all([
-        client.getEpic(configured.config.epic_id),
-        client.listEpicStories(configured.config.epic_id),
+        client.getEpic(selectedEpicId),
+        client.listEpicStories(selectedEpicId),
         client.listWorkflowStates(),
       ]);
 
@@ -353,6 +365,7 @@ export default async function plugin(bb: BbPluginApi) {
         nodes,
         edges,
         warnings,
+        configuredEpicId: configured.config.epic_id ?? null,
         generatedAt: new Date().toISOString(),
       };
     },

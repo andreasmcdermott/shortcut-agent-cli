@@ -4815,6 +4815,9 @@ function Icon({
 }
 
 // app.tsx
+var MIN_ZOOM = 0.02;
+var MAX_ZOOM = 2;
+var ZOOM_STEPS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2];
 var STATUS_LABELS = {
   ready: "Ready",
   active: "Active",
@@ -4888,41 +4891,206 @@ function Count({ label, value, tone }) {
     /* @__PURE__ */ jsx("span", { className: "text-xs text-muted-foreground", children: label })
   ] });
 }
-function EpicGraph() {
+function selectedEpicId(subPath) {
+  if (!/^\d+$/.test(subPath)) return null;
+  const value = Number(subPath);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+function epicPreferenceKey(projectId) {
+  return `shortcut-agent:last-epic:${projectId ?? "default"}`;
+}
+function readRememberedEpic(projectId) {
+  try {
+    return selectedEpicId(window.localStorage.getItem(epicPreferenceKey(projectId)) ?? "");
+  } catch {
+    return null;
+  }
+}
+function rememberEpic(projectId, epicId) {
+  try {
+    window.localStorage.setItem(epicPreferenceKey(projectId), String(epicId));
+  } catch {
+  }
+}
+function forgetEpic(projectId) {
+  try {
+    window.localStorage.removeItem(epicPreferenceKey(projectId));
+  } catch {
+  }
+}
+function EpicPicker({
+  value,
+  loading,
+  canUseDefault,
+  selectionError,
+  onChange,
+  onSubmit,
+  onUseDefault
+}) {
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("form", { className: "flex items-center gap-2", onSubmit, children: [
+      /* @__PURE__ */ jsx("label", { htmlFor: "shortcut-agent-epic-id", className: "text-xs text-muted-foreground", children: "Epic ID" }),
+      /* @__PURE__ */ jsx(
+        "input",
+        {
+          id: "shortcut-agent-epic-id",
+          className: "h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          type: "number",
+          min: "1",
+          step: "1",
+          required: true,
+          value,
+          onChange: (event) => onChange(event.target.value)
+        }
+      ),
+      /* @__PURE__ */ jsx(Button, { type: "submit", size: "sm", variant: "outline", disabled: loading, children: "Load" }),
+      canUseDefault ? /* @__PURE__ */ jsx(Button, { type: "button", size: "sm", variant: "ghost", onClick: onUseDefault, children: "Use default" }) : null
+    ] }),
+    selectionError ? /* @__PURE__ */ jsx("div", { className: "mt-1 text-xs text-destructive", children: selectionError }) : null
+  ] });
+}
+function EpicGraph({ subPath }) {
   const { projectId } = useBbContext();
+  const navigate = useBbNavigate();
   const rpc = useRpc();
+  const routeEpicId = useMemo(() => selectedEpicId(subPath), [subPath]);
+  const [rememberedEpicId, setRememberedEpicId] = useState(
+    () => routeEpicId === null ? readRememberedEpic(projectId) : null
+  );
+  const requestedEpicId = routeEpicId ?? rememberedEpicId;
+  const [epicInput, setEpicInput] = useState(
+    () => requestedEpicId === null ? "" : String(requestedEpicId)
+  );
+  const [selectionError, setSelectionError] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const graphScrollerRef = useRef(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await rpc.call("loadGraph", { projectId });
+      const result = await rpc.call("loadGraph", {
+        projectId,
+        epicId: requestedEpicId
+      });
       setData(result);
+      setEpicInput(String(result.epic.id));
+      rememberEpic(projectId, result.epic.id);
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoading(false);
     }
-  }, [projectId, rpc]);
+  }, [projectId, requestedEpicId, rpc]);
   useEffect(() => {
+    if (routeEpicId !== null) {
+      setRememberedEpicId(null);
+      setEpicInput(String(routeEpicId));
+      return;
+    }
+    const remembered = readRememberedEpic(projectId);
+    setRememberedEpicId(remembered);
+    if (remembered !== null) setEpicInput(String(remembered));
+  }, [projectId, routeEpicId]);
+  useEffect(() => {
+    if (requestedEpicId) setEpicInput(String(requestedEpicId));
     void load();
     const timer = window.setInterval(() => void load(), 6e4);
     return () => window.clearInterval(timer);
   }, [load]);
+  const chooseEpic = (event) => {
+    event.preventDefault();
+    const id = Number(epicInput);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      setSelectionError("Enter a positive Epic ID.");
+      return;
+    }
+    setSelectionError(null);
+    rememberEpic(projectId, id);
+    navigate.toPluginPanel("epic", { subPath: String(id) });
+  };
+  const useDefaultEpic = () => {
+    setSelectionError(null);
+    forgetEpic(projectId);
+    setRememberedEpicId(null);
+    navigate.toPluginPanel("epic", { subPath: "" });
+  };
+  const picker = /* @__PURE__ */ jsx(
+    EpicPicker,
+    {
+      value: epicInput,
+      loading,
+      canUseDefault: requestedEpicId !== null,
+      selectionError,
+      onChange: setEpicInput,
+      onSubmit: chooseEpic,
+      onUseDefault: useDefaultEpic
+    }
+  );
+  const visibleNodes = useMemo(
+    () => (data?.nodes ?? []).filter((node) => showCompleted || node.status !== "done"),
+    [data?.nodes, showCompleted]
+  );
+  const visibleEdges = useMemo(() => {
+    const visibleIds = new Set(visibleNodes.map((node) => node.id));
+    return (data?.edges ?? []).filter(
+      (edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)
+    );
+  }, [data?.edges, visibleNodes]);
   const layout = useMemo(
-    () => layoutGraph(data?.nodes ?? [], data?.edges ?? []),
-    [data?.edges, data?.nodes]
+    () => layoutGraph(visibleNodes, visibleEdges),
+    [visibleEdges, visibleNodes]
   );
   const nodeById = useMemo(
-    () => new Map((data?.nodes ?? []).map((node) => [node.id, node])),
-    [data?.nodes]
+    () => new Map(visibleNodes.map((node) => [node.id, node])),
+    [visibleNodes]
   );
+  const applyZoom = (nextZoom, resetScroll = false) => {
+    const boundedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    const scroller = graphScrollerRef.current;
+    const center = scroller ? {
+      x: (scroller.scrollLeft + scroller.clientWidth / 2) / zoom,
+      y: (scroller.scrollTop + scroller.clientHeight / 2) / zoom
+    } : null;
+    setZoom(boundedZoom);
+    if (!scroller) return;
+    window.requestAnimationFrame(() => {
+      if (typeof scroller.scrollTo !== "function") return;
+      if (resetScroll) {
+        scroller.scrollTo({ left: 0, top: 0 });
+      } else if (center) {
+        scroller.scrollTo({
+          left: Math.max(0, center.x * boundedZoom - scroller.clientWidth / 2),
+          top: Math.max(0, center.y * boundedZoom - scroller.clientHeight / 2)
+        });
+      }
+    });
+  };
+  const zoomOut = () => {
+    const next = [...ZOOM_STEPS].reverse().find((step) => step < zoom - 1e-3);
+    applyZoom(next ?? MIN_ZOOM);
+  };
+  const zoomIn = () => {
+    const next = ZOOM_STEPS.find((step) => step > zoom + 1e-3);
+    applyZoom(next ?? MAX_ZOOM);
+  };
+  const fitGraph = () => {
+    const scroller = graphScrollerRef.current;
+    if (!scroller || scroller.clientWidth <= 0 || scroller.clientHeight <= 0) return;
+    const availableWidth = Math.max(1, scroller.clientWidth - 24);
+    const availableHeight = Math.max(1, scroller.clientHeight - 24);
+    applyZoom(
+      Math.min(1, availableWidth / layout.width, availableHeight / layout.height),
+      true
+    );
+  };
   if (!data && loading) {
     return /* @__PURE__ */ jsxs("div", { className: "flex h-full items-center justify-center gap-2 text-sm text-muted-foreground", children: [
       /* @__PURE__ */ jsx(Icon, { name: "Spinner", className: "animate-spin", "aria-hidden": "true" }),
-      "Loading Shortcut Epic\u2026"
+      "Loading Shortcut Agent\u2026"
     ] });
   }
   if (!data && error) {
@@ -4932,6 +5100,7 @@ function EpicGraph() {
         "Epic graph unavailable"
       ] }),
       /* @__PURE__ */ jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: error }),
+      /* @__PURE__ */ jsx("div", { className: "mt-4", children: picker }),
       /* @__PURE__ */ jsxs(Button, { className: "mt-4", size: "sm", variant: "outline", onClick: () => void load(), children: [
         /* @__PURE__ */ jsx(Icon, { name: "RotateCcw", "aria-hidden": "true" }),
         "Retry"
@@ -4958,7 +5127,8 @@ function EpicGraph() {
           " \xB7 ",
           data.configPath,
           " \xB7 prerequisite \u2192 dependent"
-        ] })
+        ] }),
+        /* @__PURE__ */ jsx("div", { className: "mt-2", children: picker })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex flex-wrap items-center gap-4", children: [
         /* @__PURE__ */ jsx(Count, { label: "ready", value: data.counts.ready, tone: "ready" }),
@@ -4966,7 +5136,65 @@ function EpicGraph() {
         /* @__PURE__ */ jsx(Count, { label: "blocked", value: data.counts.blocked, tone: "blocked" }),
         /* @__PURE__ */ jsx(Count, { label: "done", value: data.counts.done, tone: "done" })
       ] }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxs(
+          "div",
+          {
+            className: "flex items-center rounded-md border border-border bg-background p-0.5",
+            role: "group",
+            "aria-label": "Graph zoom",
+            children: [
+              /* @__PURE__ */ jsx(
+                Button,
+                {
+                  type: "button",
+                  size: "icon",
+                  variant: "ghost",
+                  className: "h-7 w-7",
+                  "aria-label": "Zoom out",
+                  disabled: zoom <= MIN_ZOOM,
+                  onClick: zoomOut,
+                  children: /* @__PURE__ */ jsx("span", { "aria-hidden": "true", children: "\u2212" })
+                }
+              ),
+              /* @__PURE__ */ jsxs(
+                "span",
+                {
+                  className: "min-w-12 px-1 text-center font-mono text-[11px] text-muted-foreground",
+                  "aria-live": "polite",
+                  children: [
+                    Math.round(zoom * 100),
+                    "%"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsx(
+                Button,
+                {
+                  type: "button",
+                  size: "icon",
+                  variant: "ghost",
+                  className: "h-7 w-7",
+                  "aria-label": "Zoom in",
+                  disabled: zoom >= MAX_ZOOM,
+                  onClick: zoomIn,
+                  children: /* @__PURE__ */ jsx("span", { "aria-hidden": "true", children: "+" })
+                }
+              ),
+              /* @__PURE__ */ jsx(Button, { type: "button", size: "sm", variant: "ghost", className: "h-7", onClick: fitGraph, children: "Fit" })
+            ]
+          }
+        ),
+        data.counts.done > 0 ? /* @__PURE__ */ jsx(
+          Button,
+          {
+            size: "sm",
+            variant: showCompleted ? "secondary" : "outline",
+            "aria-pressed": showCompleted,
+            onClick: () => setShowCompleted((current) => !current),
+            children: showCompleted ? "Hide completed" : `Show completed (${data.counts.done})`
+          }
+        ) : null,
         data.epic.url ? /* @__PURE__ */ jsx(Button, { asChild: true, size: "sm", variant: "ghost", children: /* @__PURE__ */ jsx("a", { href: data.epic.url, target: "_blank", rel: "noreferrer", children: "Open Epic" }) }) : null,
         /* @__PURE__ */ jsx(
           Button,
@@ -4989,15 +5217,15 @@ function EpicGraph() {
       error && warnings.length > 0 ? /* @__PURE__ */ jsx("span", { children: " \xB7 " }) : null,
       warnings.join(" \xB7 ")
     ] }) : null,
-    /* @__PURE__ */ jsx("div", { className: "min-h-0 flex-1 overflow-auto", children: layout.nodes.length === 0 ? /* @__PURE__ */ jsx("div", { className: "flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground", children: "This Epic has no Stories yet." }) : /* @__PURE__ */ jsxs(
+    /* @__PURE__ */ jsx("div", { ref: graphScrollerRef, className: "min-h-0 flex-1 overflow-auto", children: layout.nodes.length === 0 ? /* @__PURE__ */ jsx("div", { className: "flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground", children: data.nodes.length > 0 && data.counts.done === data.nodes.length ? `All ${data.counts.done} Stories are complete.` : "This Epic has no Stories yet." }) : /* @__PURE__ */ jsxs(
       "svg",
       {
-        width: layout.width,
-        height: layout.height,
+        width: Math.max(1, Math.round(layout.width * zoom)),
+        height: Math.max(1, Math.round(layout.height * zoom)),
         viewBox: `0 0 ${layout.width} ${layout.height}`,
         role: "img",
         "aria-label": `Dependency graph for ${data.epic.name}`,
-        className: "min-h-full min-w-full",
+        className: "mx-auto block",
         children: [
           /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsx(
             "marker",
@@ -5051,7 +5279,7 @@ function EpicGraph() {
 var app_default = definePluginApp((app) => {
   app.slots.navPanel({
     id: "epic-graph",
-    title: "Shortcut Epic",
+    title: "Shortcut Agent",
     icon: "Workflow",
     path: "epic",
     component: EpicGraph

@@ -30,7 +30,7 @@ This repository contains an initial, usable implementation of the core workflow:
 - compact Epic context summaries
 - claim attribution and stale-claim reporting
 - configuration diagnostics
-- an optional bb plugin that renders the configured Epic as a live dependency graph
+- an optional Shortcut Agent bb plugin that renders the configured Epic as a live dependency graph
 
 Shortcut REST API v4 is used throughout. Shortcut currently describes v4 as an
 alpha API, so all transport-specific behavior is isolated in `src/client.js` and
@@ -73,18 +73,23 @@ Store the token in the environment; it is never written to project config:
 export SHORTCUT_API_TOKEN='sct_rw_...'
 ```
 
-## bb Epic graph plugin
+## Shortcut Agent bb plugin
 
 This repository also contains `bb-plugin-shortcut-epic`, a separate bb plugin
 under `plugins/bb-plugin-shortcut-epic`. It reads the same checked-in
 `.shortcut-agent.json`, fetches the configured Epic through Shortcut v4, and
-adds a **Shortcut Epic** nav panel to bb.
+adds a **Shortcut Agent** nav panel to bb. Its stable package and plugin ID
+remain `shortcut-epic` so existing installations keep their settings.
 
 The graph lays out blocking relations from prerequisite to dependent. Started
-work is ring-highlighted, ready and blocked Stories are distinguished, and
-completed work is faded while remaining in the dependency history. Story cards
-open their corresponding Shortcut page. The panel refreshes every 60 seconds
-and remains read-only; lifecycle changes still go through this CLI.
+work is ring-highlighted, and ready and blocked Stories are distinguished.
+Completed Stories are hidden by default to keep large graphs balanced, with a
+header toggle to restore the faded history. Zoom controls and a **Fit** action
+help navigate large graphs. Story cards open their corresponding Shortcut page.
+The **Epic ID** control switches the active Epic, puts that
+selection in the panel URL, and remembers the last opened Epic per bb project in
+the current browser. The panel refreshes every 60 seconds and remains read-only;
+lifecycle changes still go through this CLI.
 
 bb supports installing a plugin from a repository subdirectory. From this
 checkout, either install the plugin folder directly:
@@ -107,7 +112,7 @@ bb plugin install \
   --plugin shortcut-epic
 ```
 
-Then open **Extensions → Plugins → Shortcut Epic** and set its **Shortcut API
+Then open **Extensions → Plugins → Shortcut Agent** and set its **Shortcut API
 token**. This is a bb secret setting because the shared project config
 deliberately contains no credentials. `SHORTCUT_API_TOKEN` is also accepted
 when it belongs to the bb server process; an export made only inside an agent
@@ -212,6 +217,16 @@ When present, an adjacent `.shortcut-agent.local.json` is layered over the
 shared config. This provides a personal fallback without putting identity in
 shared config. The local file **must** be ignored by Git; `init --agent` warns
 when Git does not report it ignored.
+
+`epic_id` is a convenience default, not durable active-Epic state. Every
+Epic-scoped command already accepts `--epic ID`, which has higher precedence.
+For a repository that serves multiple Epics, pass `--epic` explicitly (or set
+`SHORTCUT_EPIC_ID` per process). Initialize with
+`shortcut-agent init --epic ID --no-default-epic` to omit `epic_id` and make an
+explicit Epic mandatory; workspace, team, and workflow-state configuration
+remain reusable. Requiring the flag for every repository is not recommended,
+because a stable single-Epic default is useful and avoids repetitive agent
+arguments.
 
 The project config contains no credential or agent identity and may be committed
 when a repository always maps to the same Epic. To save a local default agent,

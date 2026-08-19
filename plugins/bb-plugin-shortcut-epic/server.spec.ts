@@ -13,10 +13,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Shortcut Epic plugin backend", () => {
+describe("Shortcut Agent plugin backend", () => {
   it("loads project config and returns a validated dependency graph", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));
+      if (url.pathname.endsWith("/epics/84")) {
+        return json({
+          entity: {
+            id: 84,
+            name: "Second agent workflow",
+            app_url: "https://app.shortcut.com/acme/epic/84",
+          },
+        });
+      }
+      if (url.pathname.endsWith("/epics/84/stories")) {
+        return json({ entities: [] });
+      }
       if (url.pathname.endsWith("/epics/42")) {
         return json({
           entity: {
@@ -110,7 +122,15 @@ describe("Shortcut Epic plugin backend", () => {
       expect.objectContaining({ id: 2, status: "blocked", blocked: true }),
     ]);
     expect(result.counts).toMatchObject({ active: 1, blocked: 1 });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.configuredEpicId).toBe(42);
+
+    const override = (await harness.behavior.callRpc("loadGraph", {
+      projectId: "proj_1",
+      epicId: 84,
+    })) as GraphResponse;
+    expect(override.epic).toMatchObject({ id: 84, name: "Second agent workflow" });
+    expect(override.configuredEpicId).toBe(42);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
 
     await harness.lifecycle.dispose();
   });
@@ -121,7 +141,7 @@ describe("Shortcut Epic plugin backend", () => {
     });
     await plugin(bb);
     expect(harness.needsConfigurationMessages).toEqual([
-      "Set the Shortcut API token in Extensions → Plugins → Shortcut Epic.",
+      "Set the Shortcut API token in Extensions → Plugins → Shortcut Agent.",
     ]);
     await harness.lifecycle.dispose();
   });

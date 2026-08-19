@@ -1,10 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { definePluginApp, useBbContext, useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  definePluginApp,
+  useBbContext,
+  useBbNavigate,
+  useRpc,
+} from "@get-bb/plugin-sdk/app";
 import type { GraphResponse, rpcContract } from "./server";
 import { layoutGraph, type GraphNode, type NodeStatus } from "./graph.js";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+
+const MIN_ZOOM = 0.02;
+const MAX_ZOOM = 2;
+const ZOOM_STEPS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2];
 
 const STATUS_LABELS: Record<NodeStatus, string> = {
   ready: "Ready",
@@ -90,46 +106,245 @@ function Count({ label, value, tone }: { label: string; value: number; tone?: No
   );
 }
 
-function EpicGraph() {
+function selectedEpicId(subPath: string) {
+  if (!/^\d+$/.test(subPath)) return null;
+  const value = Number(subPath);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function epicPreferenceKey(projectId: string | null) {
+  return `shortcut-agent:last-epic:${projectId ?? "default"}`;
+}
+
+function readRememberedEpic(projectId: string | null) {
+  try {
+    return selectedEpicId(window.localStorage.getItem(epicPreferenceKey(projectId)) ?? "");
+  } catch {
+    return null;
+  }
+}
+
+function rememberEpic(projectId: string | null, epicId: number) {
+  try {
+    window.localStorage.setItem(epicPreferenceKey(projectId), String(epicId));
+  } catch {
+    // The graph still works when browser storage is unavailable.
+  }
+}
+
+function forgetEpic(projectId: string | null) {
+  try {
+    window.localStorage.removeItem(epicPreferenceKey(projectId));
+  } catch {
+    // The graph still works when browser storage is unavailable.
+  }
+}
+
+function EpicPicker({
+  value,
+  loading,
+  canUseDefault,
+  selectionError,
+  onChange,
+  onSubmit,
+  onUseDefault,
+}: {
+  value: string;
+  loading: boolean;
+  canUseDefault: boolean;
+  selectionError: string | null;
+  onChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onUseDefault: () => void;
+}) {
+  return (
+    <div>
+      <form className="flex items-center gap-2" onSubmit={onSubmit}>
+        <label htmlFor="shortcut-agent-epic-id" className="text-xs text-muted-foreground">
+          Epic ID
+        </label>
+        <input
+          id="shortcut-agent-epic-id"
+          className="h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          type="number"
+          min="1"
+          step="1"
+          required
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={loading}>
+          Load
+        </Button>
+        {canUseDefault ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onUseDefault}>
+            Use default
+          </Button>
+        ) : null}
+      </form>
+      {selectionError ? (
+        <div className="mt-1 text-xs text-destructive">{selectionError}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function EpicGraph({ subPath }: { subPath: string }) {
   const { projectId } = useBbContext();
+  const navigate = useBbNavigate();
   const rpc = useRpc<typeof rpcContract>();
+  const routeEpicId = useMemo(() => selectedEpicId(subPath), [subPath]);
+  const [rememberedEpicId, setRememberedEpicId] = useState(() =>
+    routeEpicId === null ? readRememberedEpic(projectId) : null,
+  );
+  const requestedEpicId = routeEpicId ?? rememberedEpicId;
+  const [epicInput, setEpicInput] = useState(() =>
+    requestedEpicId === null ? "" : String(requestedEpicId),
+  );
+  const [selectionError, setSelectionError] = useState<string | null>(null);
   const [data, setData] = useState<GraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const graphScrollerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await rpc.call("loadGraph", { projectId });
+      const result = await rpc.call("loadGraph", {
+        projectId,
+        epicId: requestedEpicId,
+      });
       setData(result);
+      setEpicInput(String(result.epic.id));
+      rememberEpic(projectId, result.epic.id);
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoading(false);
     }
-  }, [projectId, rpc]);
+  }, [projectId, requestedEpicId, rpc]);
 
   useEffect(() => {
+    if (routeEpicId !== null) {
+      setRememberedEpicId(null);
+      setEpicInput(String(routeEpicId));
+      return;
+    }
+    const remembered = readRememberedEpic(projectId);
+    setRememberedEpicId(remembered);
+    if (remembered !== null) setEpicInput(String(remembered));
+  }, [projectId, routeEpicId]);
+
+  useEffect(() => {
+    if (requestedEpicId) setEpicInput(String(requestedEpicId));
     void load();
     const timer = window.setInterval(() => void load(), 60_000);
     return () => window.clearInterval(timer);
   }, [load]);
 
+  const chooseEpic = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const id = Number(epicInput);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      setSelectionError("Enter a positive Epic ID.");
+      return;
+    }
+    setSelectionError(null);
+    rememberEpic(projectId, id);
+    navigate.toPluginPanel("epic", { subPath: String(id) });
+  };
+
+  const useDefaultEpic = () => {
+    setSelectionError(null);
+    forgetEpic(projectId);
+    setRememberedEpicId(null);
+    navigate.toPluginPanel("epic", { subPath: "" });
+  };
+
+  const picker = (
+    <EpicPicker
+      value={epicInput}
+      loading={loading}
+      canUseDefault={requestedEpicId !== null}
+      selectionError={selectionError}
+      onChange={setEpicInput}
+      onSubmit={chooseEpic}
+      onUseDefault={useDefaultEpic}
+    />
+  );
+
+  const visibleNodes = useMemo(
+    () => (data?.nodes ?? []).filter((node) => showCompleted || node.status !== "done"),
+    [data?.nodes, showCompleted],
+  );
+  const visibleEdges = useMemo(() => {
+    const visibleIds = new Set(visibleNodes.map((node) => node.id));
+    return (data?.edges ?? []).filter(
+      (edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target),
+    );
+  }, [data?.edges, visibleNodes]);
   const layout = useMemo(
-    () => layoutGraph(data?.nodes ?? [], data?.edges ?? []),
-    [data?.edges, data?.nodes],
+    () => layoutGraph(visibleNodes, visibleEdges),
+    [visibleEdges, visibleNodes],
   );
   const nodeById = useMemo(
-    () => new Map((data?.nodes ?? []).map((node) => [node.id, node])),
-    [data?.nodes],
+    () => new Map(visibleNodes.map((node) => [node.id, node])),
+    [visibleNodes],
   );
+
+  const applyZoom = (nextZoom: number, resetScroll = false) => {
+    const boundedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    const scroller = graphScrollerRef.current;
+    const center = scroller
+      ? {
+          x: (scroller.scrollLeft + scroller.clientWidth / 2) / zoom,
+          y: (scroller.scrollTop + scroller.clientHeight / 2) / zoom,
+        }
+      : null;
+    setZoom(boundedZoom);
+    if (!scroller) return;
+    window.requestAnimationFrame(() => {
+      if (typeof scroller.scrollTo !== "function") return;
+      if (resetScroll) {
+        scroller.scrollTo({ left: 0, top: 0 });
+      } else if (center) {
+        scroller.scrollTo({
+          left: Math.max(0, center.x * boundedZoom - scroller.clientWidth / 2),
+          top: Math.max(0, center.y * boundedZoom - scroller.clientHeight / 2),
+        });
+      }
+    });
+  };
+
+  const zoomOut = () => {
+    const next = [...ZOOM_STEPS].reverse().find((step) => step < zoom - 0.001);
+    applyZoom(next ?? MIN_ZOOM);
+  };
+
+  const zoomIn = () => {
+    const next = ZOOM_STEPS.find((step) => step > zoom + 0.001);
+    applyZoom(next ?? MAX_ZOOM);
+  };
+
+  const fitGraph = () => {
+    const scroller = graphScrollerRef.current;
+    if (!scroller || scroller.clientWidth <= 0 || scroller.clientHeight <= 0) return;
+    const availableWidth = Math.max(1, scroller.clientWidth - 24);
+    const availableHeight = Math.max(1, scroller.clientHeight - 24);
+    applyZoom(
+      Math.min(1, availableWidth / layout.width, availableHeight / layout.height),
+      true,
+    );
+  };
 
   if (!data && loading) {
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
         <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
-        Loading Shortcut Epic…
+        Loading Shortcut Agent…
       </div>
     );
   }
@@ -143,6 +358,7 @@ function EpicGraph() {
             Epic graph unavailable
           </div>
           <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          <div className="mt-4">{picker}</div>
           <Button className="mt-4" size="sm" variant="outline" onClick={() => void load()}>
             <Icon name="RotateCcw" aria-hidden="true" />
             Retry
@@ -172,6 +388,7 @@ function EpicGraph() {
           <div className="mt-0.5 truncate text-xs text-muted-foreground">
             {data.project.name} · {data.configPath} · prerequisite → dependent
           </div>
+          <div className="mt-2">{picker}</div>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <Count label="ready" value={data.counts.ready} tone="ready" />
@@ -179,7 +396,56 @@ function EpicGraph() {
           <Count label="blocked" value={data.counts.blocked} tone="blocked" />
           <Count label="done" value={data.counts.done} tone="done" />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex items-center rounded-md border border-border bg-background p-0.5"
+            role="group"
+            aria-label="Graph zoom"
+          >
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              aria-label="Zoom out"
+              disabled={zoom <= MIN_ZOOM}
+              onClick={zoomOut}
+            >
+              <span aria-hidden="true">−</span>
+            </Button>
+            <span
+              className="min-w-12 px-1 text-center font-mono text-[11px] text-muted-foreground"
+              aria-live="polite"
+            >
+              {Math.round(zoom * 100)}%
+            </span>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              aria-label="Zoom in"
+              disabled={zoom >= MAX_ZOOM}
+              onClick={zoomIn}
+            >
+              <span aria-hidden="true">+</span>
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="h-7" onClick={fitGraph}>
+              Fit
+            </Button>
+          </div>
+          {data.counts.done > 0 ? (
+            <Button
+              size="sm"
+              variant={showCompleted ? "secondary" : "outline"}
+              aria-pressed={showCompleted}
+              onClick={() => setShowCompleted((current) => !current)}
+            >
+              {showCompleted
+                ? "Hide completed"
+                : `Show completed (${data.counts.done})`}
+            </Button>
+          ) : null}
           {data.epic.url ? (
             <Button asChild size="sm" variant="ghost">
               <a href={data.epic.url} target="_blank" rel="noreferrer">
@@ -207,19 +473,21 @@ function EpicGraph() {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={graphScrollerRef} className="min-h-0 flex-1 overflow-auto">
         {layout.nodes.length === 0 ? (
           <div className="flex h-full min-h-80 items-center justify-center text-sm text-muted-foreground">
-            This Epic has no Stories yet.
+            {data.nodes.length > 0 && data.counts.done === data.nodes.length
+              ? `All ${data.counts.done} Stories are complete.`
+              : "This Epic has no Stories yet."}
           </div>
         ) : (
           <svg
-            width={layout.width}
-            height={layout.height}
+            width={Math.max(1, Math.round(layout.width * zoom))}
+            height={Math.max(1, Math.round(layout.height * zoom))}
             viewBox={`0 0 ${layout.width} ${layout.height}`}
             role="img"
             aria-label={`Dependency graph for ${data.epic.name}`}
-            className="min-h-full min-w-full"
+            className="mx-auto block"
           >
             <defs>
               <marker
@@ -278,7 +546,7 @@ function EpicGraph() {
 export default definePluginApp((app) => {
   app.slots.navPanel({
     id: "epic-graph",
-    title: "Shortcut Epic",
+    title: "Shortcut Agent",
     icon: "Workflow",
     path: "epic",
     component: EpicGraph,

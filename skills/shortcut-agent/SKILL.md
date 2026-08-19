@@ -60,13 +60,17 @@ shortcut-agent init --epic 12345
 shortcut-agent doctor
 ```
 
-`init` writes shared scope (workspace, epic, team, state IDs) to
+`init` writes shared scope (workspace, default Epic, team, state IDs) to
 `.shortcut-agent.json` in cwd, which is safe to commit. It never writes the
 token. It will not reuse an ancestor config or overwrite a differing target by
 default: use `--update-discovered` to target a bounded discovered ancestor,
 `--merge` to preserve extra keys while refreshing known fields, or `--force` to
 replace the target. Successful output includes `config_file` and
 `config_source`; check both when orchestrating setup.
+
+Treat `epic_id` as a convenience default. In a repository serving multiple
+Epics, initialize with `--no-default-epic` and pass `--epic ID` on every
+Epic-scoped command.
 
 Give **every process its own identity**. Do not rely on a local default when
 running in parallel:

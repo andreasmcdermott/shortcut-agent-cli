@@ -11,14 +11,16 @@ the complete behavioral reference.
 | `--config PATH` | Select a config file explicitly |
 | `--api-url URL` | Override API base URL (tests/proxies) |
 | `--workspace SLUG` | Override workspace |
-| `--epic ID` | Override the configured Epic |
+| `--epic ID` | Select the Epic, overriding any configured default |
 | `--team UUID` | Override the configured Team |
 | `--agent ID` | Override agent identity for this invocation |
 | `--human` | Concise text instead of JSON |
 | `--pretty` | Indented JSON |
 
 Precedence: command-line option → environment variable →
-`.shortcut-agent.local.json` → `.shortcut-agent.json`.
+`.shortcut-agent.local.json` → `.shortcut-agent.json`. `epic_id` is optional:
+remove it to require `--epic ID` (or `SHORTCUT_EPIC_ID`) for every Epic-scoped
+command, which is useful when one repository serves multiple Epics.
 
 Boolean flags may be negated with `--no-<flag>`. `--flag=value` is accepted.
 
@@ -65,8 +67,10 @@ State discovery within that workflow: `ready` ← first `unstarted`, else
 /cancel|won't|wont|abandon/i, else falls back to `done`.
 
 Overrides: `--workflow ID`, `--team UUID`, `--ready-state ID`,
-`--started-state ID`, `--done-state ID`, `--cancelled-state ID`. Fails with exit
-3 if ready/started/done cannot be resolved.
+`--started-state ID`, `--done-state ID`, `--cancelled-state ID`.
+`--no-default-epic` still uses `--epic` for discovery but omits `epic_id` from
+the written config, requiring explicit Epic selection on later commands. Fails
+with exit 3 if ready/started/done cannot be resolved.
 
 Initialization is create-only by default. A differing existing target is left
 untouched and reported with exit 3. `--merge` refreshes all known scope/state

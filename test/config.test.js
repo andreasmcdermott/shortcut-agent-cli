@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadConfig, writeConfig } from "../src/config.js";
+import { loadConfig, requireEpic, writeConfig } from "../src/config.js";
 
 async function projectConfig() {
   const directory = await mkdtemp(path.join(tmpdir(), "shortcut-agent-config-test-"));
@@ -44,6 +44,24 @@ test("layers ignored local config over shared project scope", async () => {
   assert.equal(config.agentId, "local-agent");
   assert.equal(config.agentSource, "local-config");
   assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 4 });
+});
+
+test("an explicit Epic works when project config has no default Epic", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "shortcut-agent-config-test-"));
+  await writeFile(
+    path.join(directory, ".shortcut-agent.json"),
+    JSON.stringify({
+      workspace: "acme",
+      states: { ready: 1, started: 2, done: 3 },
+    }),
+  );
+
+  const withoutEpic = await loadConfig({}, {}, directory);
+  assert.equal(withoutEpic.epicId, undefined);
+  assert.throws(() => requireEpic(withoutEpic), /pass --epic ID/);
+
+  const selected = await loadConfig({ epic: "42" }, {}, directory);
+  assert.equal(requireEpic(selected), 42);
 });
 
 test("runtime identity overrides local and legacy project identities", async () => {

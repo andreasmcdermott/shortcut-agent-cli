@@ -118,8 +118,14 @@
     .absolute {
       position: absolute;
     }
+    .mx-auto {
+      margin-inline: auto;
+    }
     .mt-0\.5 {
       margin-top: calc(var(--spacing) * 0.5);
+    }
+    .mt-1 {
+      margin-top: calc(var(--spacing) * 1);
     }
     .mt-1\.5 {
       margin-top: calc(var(--spacing) * 1.5);
@@ -139,11 +145,17 @@
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
     }
+    .block {
+      display: block;
+    }
     .flex {
       display: flex;
     }
     .inline-flex {
       display: inline-flex;
+    }
+    .h-7 {
+      height: calc(var(--spacing) * 7);
     }
     .h-8 {
       height: calc(var(--spacing) * 8);
@@ -163,11 +175,14 @@
     .min-h-80 {
       min-height: calc(var(--spacing) * 80);
     }
-    .min-h-full {
-      min-height: 100%;
+    .w-7 {
+      width: calc(var(--spacing) * 7);
     }
     .w-9 {
       width: calc(var(--spacing) * 9);
+    }
+    .w-28 {
+      width: calc(var(--spacing) * 28);
     }
     .max-w-lg {
       max-width: var(--container-lg);
@@ -175,8 +190,8 @@
     .min-w-0 {
       min-width: calc(var(--spacing) * 0);
     }
-    .min-w-full {
-      min-width: 100%;
+    .min-w-12 {
+      min-width: calc(var(--spacing) * 12);
     }
     .flex-1 {
       flex: 1;
@@ -347,6 +362,9 @@
         stroke: color-mix(in oklab, var(--primary) 75%, transparent);
       }
     }
+    .p-0\.5 {
+      padding: calc(var(--spacing) * 0.5);
+    }
     .p-1 {
       padding: calc(var(--spacing) * 1);
     }
@@ -359,8 +377,14 @@
     .p-6 {
       padding: calc(var(--spacing) * 6);
     }
+    .px-1 {
+      padding-inline: calc(var(--spacing) * 1);
+    }
     .px-1\.5 {
       padding-inline: calc(var(--spacing) * 1.5);
+    }
+    .px-2 {
+      padding-inline: calc(var(--spacing) * 2);
     }
     .px-3 {
       padding-inline: calc(var(--spacing) * 3);
@@ -382,6 +406,9 @@
     }
     .pt-2 {
       padding-top: calc(var(--spacing) * 2);
+    }
+    .text-center {
+      text-align: center;
     }
     .font-mono {
       font-family: var(--font-mono);
@@ -429,6 +456,9 @@
     }
     .text-destructive-foreground {
       color: var(--destructive-foreground);
+    }
+    .text-foreground {
+      color: var(--foreground);
     }
     .text-muted-foreground {
       color: var(--muted-foreground);
@@ -485,6 +515,10 @@
     .duration-150 {
       --tw-duration: 150ms;
       transition-duration: 150ms;
+    }
+    .outline-none {
+      --tw-outline-style: none;
+      outline-style: none;
     }
     .hover\:bg-destructive\/90 {
       &:hover {

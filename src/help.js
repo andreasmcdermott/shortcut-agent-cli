@@ -2,7 +2,7 @@ const GLOBAL_OPTIONS = [
   ["--config PATH", "Select a config file"],
   ["--api-url URL", "Override the Shortcut API URL"],
   ["--workspace SLUG", "Override workspace"],
-  ["--epic ID", "Override the configured Epic"],
+  ["--epic ID", "Select the Epic, overriding any configured default"],
   ["--team UUID", "Override the configured Team"],
   ["--agent ID", "Override the stable agent identity"],
   ["--human", "Concise human-readable output"],
@@ -17,6 +17,7 @@ const COMMANDS = {
     usage: ["init --epic ID [--team UUID] [--workflow ID] [state options]"],
     options: [
       ["--epic ID", "Target Epic"],
+      ["--no-default-epic", "Do not save this Epic as the project default"],
       ["--team UUID", "Use this Team instead of the Epic's Team"],
       ["--workflow ID", "Use this Workflow instead of discovering one from the Team"],
       ["--ready-state ID", "Override the discovered Ready state"],
@@ -52,7 +53,7 @@ const COMMANDS = {
     ],
   },
   list: {
-    description: "Lists every Story in the configured Epic.",
+    description: "Lists every Story in the selected Epic.",
     usage: ["list [--epic ID]"],
   },
   ready: {

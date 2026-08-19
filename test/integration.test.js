@@ -297,6 +297,7 @@ test("init discovers workspace and semantic workflow states", async (t) => {
     await readFile(path.join(directory, ".shortcut-agent.json"), "utf8"),
   );
   assert.equal(config.workspace, "acme");
+  assert.equal(config.epic_id, 99);
   assert.equal(Object.hasOwn(config, "agent_id"), false);
   assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
   await assert.rejects(
@@ -537,6 +538,25 @@ test("successful commands report config provenance", async (t) => {
   assert.equal(result.exitCode, 0, result.stderr);
   assert.equal(result.json.config_file, path.join(setup.directory, ".shortcut-agent.json"));
   assert.equal(result.json.config_source, "ancestor");
+});
+
+test("init can omit the default Epic for multi-Epic repositories", async (t) => {
+  const mock = await mockShortcut();
+  t.after(() => mock.instance.close());
+  const directory = await mkdtemp(path.join(tmpdir(), "shortcut-agent-init-test-"));
+  const result = await invoke(
+    ["init", "--epic", "99", "--no-default-epic"],
+    {
+      directory,
+      env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl },
+    },
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = JSON.parse(
+    await readFile(path.join(directory, ".shortcut-agent.json"), "utf8"),
+  );
+  assert.equal(config.workspace, "acme");
+  assert.equal(Object.hasOwn(config, "epic_id"), false);
 });
 
 test("init stores an explicitly requested agent only in ignored local config", async (t) => {

@@ -295,7 +295,9 @@ export async function initCommand(parsed, context) {
   const teamId = teamOption ?? (team ? String(team.id) : undefined);
   const document = {
     workspace,
-    epic_id: Number(epic.id),
+    ...(flag(parsed.options, "default-epic", true)
+      ? { epic_id: Number(epic.id) }
+      : {}),
     ...(teamId ? { team_id: teamId } : {}),
     states: {
       ready: Number(ready),

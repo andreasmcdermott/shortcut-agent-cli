@@ -1,7 +1,7 @@
 {
   "name": "bb-plugin-shortcut-epic",
   "version": "0.1.0",
-  "description": "Visualize an agent-oriented Shortcut Epic as a live dependency graph in bb.",
+  "description": "Coordinate agent work in Shortcut with a live Epic dependency graph in bb.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -14,16 +14,17 @@
     "bbPluginSdk": ">=0.4.6"
   },
   "bb": {
-    "name": "Shortcut Epic",
+    "name": "Shortcut Agent",
     "description": "Track ready, active, blocked, and completed agent work across a Shortcut Epic.",
     "branding": {
-      "icon": "Workflow"
+      "icon": "./assets/shortcut-agent.svg"
     },
     "server": "./server.ts",
     "app": "./app.tsx",
     "skills": []
   },
   "files": [
+    "assets",
     "dist"
   ],
   "scripts": {

@@ -14853,7 +14853,7 @@ function classifyStories(stories, statesById, options = {}) {
 var CONFIG_FILENAME = ".shortcut-agent.json";
 var configSchema = external_exports.object({
   workspace: external_exports.string().min(1),
-  epic_id: external_exports.coerce.number().int().positive(),
+  epic_id: external_exports.coerce.number().int().positive().optional(),
   api_url: external_exports.string().url().optional()
 }).passthrough();
 var nodeStatusSchema = external_exports.enum(["ready", "active", "blocked", "done", "other"]);
@@ -14893,11 +14893,15 @@ var graphResponseSchema = external_exports.object({
   nodes: external_exports.array(graphNodeSchema),
   edges: external_exports.array(graphEdgeSchema),
   warnings: external_exports.array(external_exports.string()),
+  configuredEpicId: external_exports.number().int().nullable(),
   generatedAt: external_exports.string()
 });
 var rpcContract = defineRpcContract({
   loadGraph: {
-    input: external_exports.object({ projectId: external_exports.string().nullable() }).strict(),
+    input: external_exports.object({
+      projectId: external_exports.string().nullable(),
+      epicId: external_exports.number().int().positive().nullable().optional()
+    }).strict(),
     output: graphResponseSchema
   }
 });
@@ -14995,7 +14999,7 @@ async function resolveConfiguredProject(bb, requestedProjectId, defaultProjectId
     );
   }
   throw new Error(
-    `Multiple bb projects contain ${CONFIG_FILENAME}. Select the default project in Extensions \u2192 Plugins \u2192 Shortcut Epic.`
+    `Multiple bb projects contain ${CONFIG_FILENAME}. Select the default project in Extensions \u2192 Plugins \u2192 Shortcut Agent.`
   );
 }
 function statusByStoryId(stories, states) {
@@ -15023,27 +15027,33 @@ async function plugin(bb) {
   const initial = await settings.get();
   if (!initial.apiToken && !process.env.SHORTCUT_API_TOKEN) {
     bb.status.needsConfiguration(
-      "Set the Shortcut API token in Extensions \u2192 Plugins \u2192 Shortcut Epic."
+      "Set the Shortcut API token in Extensions \u2192 Plugins \u2192 Shortcut Agent."
     );
   }
   bb.rpc.register(rpcContract, {
-    async loadGraph({ projectId }) {
+    async loadGraph({ projectId, epicId }) {
       const current = await settings.get();
       const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
       if (!token) {
         throw new Error(
-          "Shortcut API token is not configured. Set it in Extensions \u2192 Plugins \u2192 Shortcut Epic."
+          "Shortcut API token is not configured. Set it in Extensions \u2192 Plugins \u2192 Shortcut Agent."
         );
       }
       const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const selectedEpicId = epicId ?? configured.config.epic_id;
+      if (!selectedEpicId) {
+        throw new Error(
+          "No Epic is selected. Enter an Epic ID in the panel or add epic_id to .shortcut-agent.json."
+        );
+      }
       const client = new ShortcutClient({
         token,
         workspace: configured.config.workspace,
         baseUrl: configured.config.api_url ?? process.env.SHORTCUT_API_URL ?? "https://api.app.shortcut.com"
       });
       const [epic, stories, workflowStates] = await Promise.all([
-        client.getEpic(configured.config.epic_id),
-        client.listEpicStories(configured.config.epic_id),
+        client.getEpic(selectedEpicId),
+        client.listEpicStories(selectedEpicId),
         client.listWorkflowStates()
       ]);
       await Promise.all(
@@ -15122,6 +15132,7 @@ async function plugin(bb) {
         nodes,
         edges,
         warnings,
+        configuredEpicId: configured.config.epic_id ?? null,
         generatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
     }
