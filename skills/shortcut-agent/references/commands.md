@@ -1,7 +1,8 @@
 # `shortcut-agent` command reference
 
-Verified against the implementation. Per-subcommand `--help` only reprints the
-global usage, so this file is the working reference.
+Verified against the implementation. Run `shortcut-agent COMMAND --help` (or
+`shortcut-agent help COMMAND`) for concise command-specific usage; this file is
+the complete behavioral reference.
 
 ## Global options
 

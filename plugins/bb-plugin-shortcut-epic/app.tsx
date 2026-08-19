@@ -53,7 +53,7 @@ function StoryNode({ node }: { node: GraphNode }) {
           </span>
         </div>
       </div>
-      <div className="mt-1.5 line-clamp-2 text-sm font-medium leading-snug">{node.title}</div>
+      <div className="mt-1.5 break-words text-sm font-medium leading-snug">{node.title}</div>
       <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-[11px] text-muted-foreground">
         <span className="truncate">{node.owners.join(", ") || node.stateName}</span>
         {node.externalBlockedBy.length > 0 ? (

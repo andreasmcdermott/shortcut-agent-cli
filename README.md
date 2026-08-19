@@ -56,6 +56,17 @@ directly:
 node ./bin/shortcut-agent.js help
 ```
 
+Every command has focused help that does not require configuration or API
+access:
+
+```sh
+shortcut-agent create --help
+shortcut-agent ready --help
+shortcut-agent dep add --help
+# Equivalent form:
+shortcut-agent help ready
+```
+
 Store the token in the environment; it is never written to project config:
 
 ```sh

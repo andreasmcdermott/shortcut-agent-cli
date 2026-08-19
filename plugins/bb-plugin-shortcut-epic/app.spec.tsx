@@ -8,6 +8,9 @@ import {
 } from "@get-bb/plugin-sdk/testing/app";
 import type { GraphResponse, rpcContract } from "./server.js";
 
+const longStoryTitle =
+  "Fix double-escaping in the Emoji-based activity feed rendering for Story updates";
+
 const graph: GraphResponse = {
   project: { id: "proj_1", name: "Agent project" },
   configPath: ".shortcut-agent.json",
@@ -34,7 +37,7 @@ const graph: GraphResponse = {
     },
     {
       id: 2,
-      title: "Dependent",
+      title: longStoryTitle,
       url: "https://app.shortcut.com/acme/story/2",
       stateName: "Ready",
       stateType: "unstarted",
@@ -74,7 +77,9 @@ describe("Shortcut Epic nav panel", () => {
 
     await slot.findByText("Ship agent workflow");
     expect(slot.getByText("Foundation")).toBeTruthy();
-    expect(slot.getByText("Dependent")).toBeTruthy();
+    const title = slot.getByText(longStoryTitle);
+    expect(title.classList.contains("line-clamp-2")).toBe(false);
+    expect(title.classList.contains("break-words")).toBe(true);
     expect(
       slot.getByRole("img", { name: "Dependency graph for Ship agent workflow" }),
     ).toBeTruthy();
