@@ -127,12 +127,26 @@ var {
   useSettings
 } = mod2;
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/graph.ts
+// graph.ts
 var NODE_WIDTH = 252;
-var NODE_HEIGHT = 112;
+var MIN_NODE_HEIGHT = 112;
+var TITLE_CHARS_PER_LINE = 24;
+var TITLE_LINE_HEIGHT = 20;
+var TITLE_LINES_AT_MIN_HEIGHT = 2;
 var COLUMN_GAP = 104;
 var ROW_GAP = 32;
 var PADDING = 44;
+function estimatedTitleLines(title) {
+  const length = title.trim().replace(/\s+/g, " ").length;
+  return Math.max(1, Math.ceil(length / TITLE_CHARS_PER_LINE));
+}
+function nodeHeight(node) {
+  const extraTitleLines = Math.max(
+    0,
+    estimatedTitleLines(node.title) - TITLE_LINES_AT_MIN_HEIGHT
+  );
+  return MIN_NODE_HEIGHT + extraTitleLines * TITLE_LINE_HEIGHT;
+}
 function compareNodes(left, right) {
   const leftPosition = left.position ?? Number.MAX_SAFE_INTEGER;
   const rightPosition = right.position ?? Number.MAX_SAFE_INTEGER;
@@ -166,9 +180,11 @@ function layoutGraph(nodes, edges) {
   }
   const queue = nodes.filter((node) => indegree.get(node.id) === 0).sort(compareNodes).map((node) => node.id);
   const processed = /* @__PURE__ */ new Set();
+  const topologicalOrder = [];
   while (queue.length > 0) {
     const id = queue.shift();
     processed.add(id);
+    topologicalOrder.push(id);
     for (const target of adjacency.get(id) ?? []) {
       ranks.set(target, Math.max(ranks.get(target) ?? 0, (ranks.get(id) ?? 0) + 1));
       const nextDegree = (indegree.get(target) ?? 0) - 1;
@@ -178,6 +194,14 @@ function layoutGraph(nodes, edges) {
         queue.sort((left, right) => compareNodes(nodeById.get(left), nodeById.get(right)));
       }
     }
+  }
+  for (const id of [...topologicalOrder].reverse()) {
+    const targets = [...adjacency.get(id) ?? []].filter(
+      (target) => processed.has(target)
+    );
+    if (targets.length === 0) continue;
+    const latestRank = Math.min(...targets.map((target) => ranks.get(target) - 1));
+    ranks.set(id, Math.max(ranks.get(id) ?? 0, latestRank));
   }
   const cyclicNodeIds = nodes.filter((node) => !processed.has(node.id)).sort(compareNodes).map((node) => node.id);
   if (cyclicNodeIds.length > 0) {
@@ -191,23 +215,30 @@ function layoutGraph(nodes, edges) {
     columns.get(rank).push(node);
   }
   const orderedRanks = [...columns.keys()].sort((left, right) => left - right);
-  const maxRows = Math.max(...[...columns.values()].map((column) => column.length));
-  const graphHeight = PADDING * 2 + maxRows * NODE_HEIGHT + Math.max(0, maxRows - 1) * ROW_GAP;
+  const columnHeights = new Map(
+    [...columns].map(([rank, column]) => [
+      rank,
+      column.reduce((height, node) => height + nodeHeight(node), 0) + Math.max(0, column.length - 1) * ROW_GAP
+    ])
+  );
+  const graphHeight = PADDING * 2 + Math.max(...columnHeights.values());
   const graphWidth = PADDING * 2 + orderedRanks.length * NODE_WIDTH + Math.max(0, orderedRanks.length - 1) * COLUMN_GAP;
   const positioned = [];
   orderedRanks.forEach((rank, columnIndex) => {
     const column = columns.get(rank);
-    const columnHeight = column.length * NODE_HEIGHT + Math.max(0, column.length - 1) * ROW_GAP;
-    const startY = (graphHeight - columnHeight) / 2;
-    column.forEach((node, rowIndex) => {
+    const columnHeight = columnHeights.get(rank);
+    let nextY = (graphHeight - columnHeight) / 2;
+    column.forEach((node) => {
+      const height = nodeHeight(node);
       positioned.push({
         ...node,
         x: PADDING + columnIndex * (NODE_WIDTH + COLUMN_GAP),
-        y: startY + rowIndex * (NODE_HEIGHT + ROW_GAP),
+        y: nextY,
         width: NODE_WIDTH,
-        height: NODE_HEIGHT,
+        height,
         rank
       });
+      nextY += height + ROW_GAP;
     });
   });
   const positionedById = new Map(positioned.map((node) => [node.id, node]));
@@ -233,7 +264,7 @@ function layoutGraph(nodes, edges) {
   };
 }
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/@radix-ui/react-compose-refs/dist/index.mjs
+// node_modules/@radix-ui/react-compose-refs/dist/index.mjs
 var __defProp2 = Object.defineProperty;
 var __name = (target, value) => __defProp2(target, "name", { value, configurable: true });
 function setRef(ref, value) {
@@ -274,7 +305,7 @@ function useComposedRefs(...refs) {
 }
 __name(useComposedRefs, "useComposedRefs");
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/@radix-ui/react-slot/dist/index.mjs
+// node_modules/@radix-ui/react-slot/dist/index.mjs
 var __defProp3 = Object.defineProperty;
 var __name2 = (target, value) => __defProp3(target, "name", { value, configurable: true });
 // @__NO_SIDE_EFFECTS__
@@ -410,7 +441,7 @@ var createSlottableError = /* @__PURE__ */ __name2((ownerName) => {
 }, "createSlottableError");
 var use2 = react_exports[" use ".trim().toString()];
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/clsx/dist/clsx.mjs
+// node_modules/clsx/dist/clsx.mjs
 function r(e) {
   var t, f, n = "";
   if ("string" == typeof e || "number" == typeof e) n += e;
@@ -425,7 +456,7 @@ function clsx() {
   return n;
 }
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/class-variance-authority/dist/index.mjs
+// node_modules/class-variance-authority/dist/index.mjs
 var falsyToString = (value) => typeof value === "boolean" ? `${value}` : value === 0 ? "0" : value;
 var cx = clsx;
 var cva = (base, config) => (props) => {
@@ -467,7 +498,7 @@ var cva = (base, config) => (props) => {
   return cx(base, getVariantClassNames, getCompoundVariantClassNames, props === null || props === void 0 ? void 0 : props.class, props === null || props === void 0 ? void 0 : props.className);
 };
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/tailwind-merge/dist/bundle-mjs.mjs
+// node_modules/tailwind-merge/dist/bundle-mjs.mjs
 var concatArrays = (array1, array2) => {
   const combinedArray = new Array(array1.length + array2.length);
   for (let i = 0; i < array1.length; i++) {
@@ -3721,12 +3752,12 @@ var getDefaultConfig = () => {
 };
 var twMerge = /* @__PURE__ */ createTailwindMerge(getDefaultConfig);
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/lib/utils.ts
+// lib/utils.ts
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/components/ui/motion.ts
+// components/ui/motion.ts
 var CONTROL_HOVER_TRANSITION = "transition-colors duration-150 hover:duration-0";
 
 // bb-plugin-runtime-shim:react/jsx-runtime
@@ -3741,7 +3772,7 @@ var {
   jsxs
 } = mod3;
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/components/ui/button.tsx
+// components/ui/button.tsx
 var buttonVariants = cva(
   `inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ${CONTROL_HOVER_TRANSITION} focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0`,
   {
@@ -3782,7 +3813,7 @@ var Button = forwardRef(
 );
 Button.displayName = "Button";
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/@hugeicons/react/dist/esm/HugeiconsIcon.js
+// node_modules/@hugeicons/react/dist/esm/HugeiconsIcon.js
 var defaultAttributes = {
   xmlns: "http://www.w3.org/2000/svg",
   width: 24,
@@ -3833,7 +3864,7 @@ var HugeiconsIcon = forwardRef(({ color = "currentColor", size = 24, strokeWidth
 });
 HugeiconsIcon.displayName = "HugeiconsIcon";
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/node_modules/@hugeicons/core-free-icons/dist/esm/index.js
+// node_modules/@hugeicons/core-free-icons/dist/esm/index.js
 var AiContentGenerator01Icon = [
   ["path", { d: "M11 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V10C2 6.22876 2 4.34315 3.17157 3.17157C4.34315 2 6.22876 2 10 2H12C15.7712 2 17.6569 2 18.8284 3.17157C20 4.34315 20 6.22876 20 10V10.5", stroke: "currentColor", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "1.5", key: "0" }],
   ["path", { d: "M17.4069 14.4036C17.6192 13.8655 18.3808 13.8655 18.5931 14.4036L18.6298 14.4969C19.1482 15.8113 20.1887 16.8518 21.5031 17.3702L21.5964 17.4069C22.1345 17.6192 22.1345 18.3808 21.5964 18.5931L21.5031 18.6298C20.1887 19.1482 19.1482 20.1887 18.6298 21.5031L18.5931 21.5964C18.3808 22.1345 17.6192 22.1345 17.4069 21.5964L17.3702 21.5031C16.8518 20.1887 15.8113 19.1482 14.4969 18.6298L14.4036 18.5931C13.8655 18.3808 13.8655 17.6192 14.4036 17.4069L14.4969 17.3702C15.8113 16.8518 16.8518 15.8113 17.3702 14.4969L17.4069 14.4036Z", stroke: "currentColor", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "1.5", key: "1" }],
@@ -4494,7 +4525,7 @@ var ZoomOutAreaIcon = [
   ["path", { d: "M10 3H14M3 10V14M6.5 21C4.567 21 3 19.433 3 17.5M17.5 3C19.433 3 21 4.567 21 6.5M3 6.5C3 4.567 4.567 3 6.5 3", stroke: "currentColor", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "1.5", key: "2" }]
 ];
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/components/ui/icon.tsx
+// components/ui/icon.tsx
 var PaletteStrokeRoundedIcon = [
   [
     "path",
@@ -4783,7 +4814,7 @@ function Icon({
   );
 }
 
-// repos/shortcut-agent-cli/plugins/bb-plugin-shortcut-epic/app.tsx
+// app.tsx
 var STATUS_LABELS = {
   ready: "Ready",
   active: "Active",
@@ -4828,7 +4859,7 @@ function StoryNode({ node }) {
         )
       ] })
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "mt-1.5 line-clamp-2 text-sm font-medium leading-snug", children: node.title }),
+    /* @__PURE__ */ jsx("div", { className: "mt-1.5 break-words text-sm font-medium leading-snug", children: node.title }),
     /* @__PURE__ */ jsxs("div", { className: "mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-[11px] text-muted-foreground", children: [
       /* @__PURE__ */ jsx("span", { className: "truncate", children: node.owners.join(", ") || node.stateName }),
       node.externalBlockedBy.length > 0 ? /* @__PURE__ */ jsxs("span", { className: "shrink-0 text-destructive", title: `External blockers: ${node.externalBlockedBy.join(", ")}`, children: [

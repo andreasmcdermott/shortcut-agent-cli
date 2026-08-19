@@ -6,64 +6,10 @@ import {
 } from "./config.js";
 import { ShortcutClient } from "./client.js";
 import { executeCommand } from "./commands.js";
-import { toErrorPayload } from "./errors.js";
+import { argumentError, toErrorPayload } from "./errors.js";
+import { commandHelp, globalHelp } from "./help.js";
 
 export const VERSION = "0.1.0";
-
-const HELP = `shortcut-agent ${VERSION}
-
-Agent-first Shortcut work coordination.
-
-Usage:
-  shortcut-agent init --epic ID [--team UUID] [--workflow ID] [state options]
-  shortcut-agent config
-  shortcut-agent doctor
-  shortcut-agent create --title TITLE --description TEXT [relations]
-  shortcut-agent list [--epic ID]
-  shortcut-agent ready [--include-assigned]
-  shortcut-agent blocked
-  shortcut-agent show STORY [--all-comments]
-  shortcut-agent edit STORY [field options]
-  shortcut-agent start STORY
-  shortcut-agent complete STORY --summary TEXT [--verification TEXT]
-  shortcut-agent cancel STORY --reason TEXT
-  shortcut-agent release STORY --reason TEXT
-  shortcut-agent handoff STORY --summary TEXT [--release]
-  shortcut-agent dep add|remove STORY --blocked-by|--blocks|--related-to OTHER
-  shortcut-agent claims [--mine|--held-by ID] [--stale] [--stale-minutes N]
-  shortcut-agent context
-
-Global options:
-  --config PATH       Select a config file
-  --api-url URL       Override the Shortcut API URL
-  --workspace SLUG    Override workspace
-  --epic ID           Override the configured Epic
-  --team UUID         Override the configured Team
-  --agent ID          Override the stable agent identity
-  --human             Concise human-readable output
-  --pretty            Indented JSON output
-  -h, --help          Show help
-  -V, --version       Show version
-
-Init options:
-  --workflow ID       Use this Workflow instead of the team's default
-  --ready-state ID    Explicit state override (also started/done/cancelled)
-  --agent ID          Save a local default agent identity
-  --merge             Update known fields while preserving extra config keys
-  --force             Replace an existing config instead of refusing changes
-  --update-discovered Update the bounded ancestor config instead of cwd
-
-Edit mutations (distinct from the scope options above):
-  --move-to-epic ID   Move the Story to another Epic
-  --set-team [UUID]   Set the Story team, defaulting to the configured team
-  --clear-team        Remove the Story team
-
-Create relations:
-  --blocked-by ID     Existing Story blocks this Story (repeatable)
-  --blocks ID         This Story blocks an existing Story (repeatable)
-  --related-to ID     Non-blocking relation (repeatable)
-
-See README.md for the complete behavioral contract and configuration reference.`;
 
 function humanStory(story) {
   const state = story.state?.name ?? story.state?.type ?? "unknown";
@@ -124,7 +70,17 @@ export async function run(
   try {
     parsed = parseArgv(argv);
     if (parsed.command === "help" || flag(parsed.options, "help")) {
-      stdout.write(`${HELP}\n`);
+      const helpCommand = parsed.command === "help" ? parsed.args[0] : parsed.command;
+      const helpSubcommand =
+        parsed.command === "help" ? parsed.args[1] : parsed.subcommand;
+      const help = helpCommand
+        ? commandHelp(helpCommand, helpSubcommand)
+        : globalHelp(VERSION);
+      if (!help) {
+        const topic = [helpCommand, helpSubcommand].filter(Boolean).join(" ");
+        throw argumentError(`Unknown help topic: ${topic}`);
+      }
+      stdout.write(`${help}\n`);
       return 0;
     }
     if (parsed.command === "version" || flag(parsed.options, "version")) {

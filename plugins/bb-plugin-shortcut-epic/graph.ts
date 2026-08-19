@@ -41,10 +41,26 @@ export interface GraphLayout {
 }
 
 const NODE_WIDTH = 252;
-const NODE_HEIGHT = 112;
+const MIN_NODE_HEIGHT = 112;
+const TITLE_CHARS_PER_LINE = 24;
+const TITLE_LINE_HEIGHT = 20;
+const TITLE_LINES_AT_MIN_HEIGHT = 2;
 const COLUMN_GAP = 104;
 const ROW_GAP = 32;
 const PADDING = 44;
+
+function estimatedTitleLines(title: string) {
+  const length = title.trim().replace(/\s+/g, " ").length;
+  return Math.max(1, Math.ceil(length / TITLE_CHARS_PER_LINE));
+}
+
+function nodeHeight(node: GraphNode) {
+  const extraTitleLines = Math.max(
+    0,
+    estimatedTitleLines(node.title) - TITLE_LINES_AT_MIN_HEIGHT,
+  );
+  return MIN_NODE_HEIGHT + extraTitleLines * TITLE_LINE_HEIGHT;
+}
 
 function compareNodes(left: GraphNode, right: GraphNode) {
   const leftPosition = left.position ?? Number.MAX_SAFE_INTEGER;
@@ -86,10 +102,12 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): GraphLayout
     .sort(compareNodes)
     .map((node) => node.id);
   const processed = new Set<number>();
+  const topologicalOrder: number[] = [];
 
   while (queue.length > 0) {
     const id = queue.shift()!;
     processed.add(id);
+    topologicalOrder.push(id);
     for (const target of adjacency.get(id) ?? []) {
       ranks.set(target, Math.max(ranks.get(target) ?? 0, (ranks.get(id) ?? 0) + 1));
       const nextDegree = (indegree.get(target) ?? 0) - 1;
@@ -99,6 +117,15 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): GraphLayout
         queue.sort((left, right) => compareNodes(nodeById.get(left)!, nodeById.get(right)!));
       }
     }
+  }
+
+  for (const id of [...topologicalOrder].reverse()) {
+    const targets = [...(adjacency.get(id) ?? [])].filter((target) =>
+      processed.has(target),
+    );
+    if (targets.length === 0) continue;
+    const latestRank = Math.min(...targets.map((target) => ranks.get(target)! - 1));
+    ranks.set(id, Math.max(ranks.get(id) ?? 0, latestRank));
   }
 
   const cyclicNodeIds = nodes
@@ -118,9 +145,14 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): GraphLayout
   }
 
   const orderedRanks = [...columns.keys()].sort((left, right) => left - right);
-  const maxRows = Math.max(...[...columns.values()].map((column) => column.length));
-  const graphHeight =
-    PADDING * 2 + maxRows * NODE_HEIGHT + Math.max(0, maxRows - 1) * ROW_GAP;
+  const columnHeights = new Map(
+    [...columns].map(([rank, column]) => [
+      rank,
+      column.reduce((height, node) => height + nodeHeight(node), 0) +
+        Math.max(0, column.length - 1) * ROW_GAP,
+    ]),
+  );
+  const graphHeight = PADDING * 2 + Math.max(...columnHeights.values());
   const graphWidth =
     PADDING * 2 +
     orderedRanks.length * NODE_WIDTH +
@@ -129,18 +161,19 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): GraphLayout
 
   orderedRanks.forEach((rank, columnIndex) => {
     const column = columns.get(rank)!;
-    const columnHeight =
-      column.length * NODE_HEIGHT + Math.max(0, column.length - 1) * ROW_GAP;
-    const startY = (graphHeight - columnHeight) / 2;
-    column.forEach((node, rowIndex) => {
+    const columnHeight = columnHeights.get(rank)!;
+    let nextY = (graphHeight - columnHeight) / 2;
+    column.forEach((node) => {
+      const height = nodeHeight(node);
       positioned.push({
         ...node,
         x: PADDING + columnIndex * (NODE_WIDTH + COLUMN_GAP),
-        y: startY + rowIndex * (NODE_HEIGHT + ROW_GAP),
+        y: nextY,
         width: NODE_WIDTH,
-        height: NODE_HEIGHT,
+        height,
         rank,
       });
+      nextY += height + ROW_GAP;
     });
   });
 
