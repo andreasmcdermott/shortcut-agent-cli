@@ -1,0 +1,11 @@
+{
+  "$schema": "https://getbb.app/schemas/plugins.schema.json",
+  "schemaVersion": 1,
+  "name": "shortcut-agent-cli-plugins",
+  "plugins": [
+    {
+      "name": "shortcut-epic",
+      "source": "./plugins/bb-plugin-shortcut-epic"
+    }
+  ]
+}

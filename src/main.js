@@ -46,9 +46,12 @@ Global options:
   -V, --version       Show version
 
 Init options:
-  --workflow ID       Discover states from this Workflow, bypassing team lookup
+  --workflow ID       Use this Workflow instead of the team's default
   --ready-state ID    Explicit state override (also started/done/cancelled)
   --agent ID          Save a local default agent identity
+  --merge             Update known fields while preserving extra config keys
+  --force             Replace an existing config instead of refusing changes
+  --update-discovered Update the bounded ancestor config instead of cwd
 
 Edit mutations (distinct from the scope options above):
   --move-to-epic ID   Move the Story to another Epic
@@ -129,7 +132,9 @@ export async function run(
       return 0;
     }
 
-    const config = await loadConfig(parsed.options, env, cwd);
+    const config = await loadConfig(parsed.options, env, cwd, {
+      forInit: parsed.command === "init",
+    });
     const makeClient = ({ workspace = config.workspace } = {}) =>
       new ShortcutClient({
         token: requireToken(config),
@@ -144,7 +149,7 @@ export async function run(
       requireWorkspace(config);
       client = makeClient();
     }
-    const payload = await executeCommand(parsed, {
+    const commandPayload = await executeCommand(parsed, {
       config,
       client,
       makeClient,
@@ -152,6 +157,11 @@ export async function run(
       stdin,
       env,
     });
+    const payload = {
+      ...commandPayload,
+      config_file: commandPayload.config_file ?? config.filename ?? null,
+      config_source: commandPayload.config_source ?? config.source,
+    };
     if (flag(parsed.options, "human")) stdout.write(`${formatHuman(payload)}\n`);
     else writeJson(stdout, payload, flag(parsed.options, "pretty"));
     return payload.ok === false && parsed.command === "doctor" ? 3 : 0;
