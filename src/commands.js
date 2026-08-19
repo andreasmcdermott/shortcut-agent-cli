@@ -22,6 +22,7 @@ import { createAgentEvent, parseAgentEvent } from "./comments.js";
 import {
   assertNoCycle,
   assertSameEpic,
+  nestedEntities,
   classifyStories,
   isReady,
   linkEndpoints,
@@ -134,6 +135,60 @@ function configuredStateTypes(config, index) {
   return result;
 }
 
+function workflowName(states, workflowId) {
+  if (!workflowId) return null;
+  const match = states.find((state) => Number(state.workflow?.id) === Number(workflowId));
+  return match?.workflow?.name ?? null;
+}
+
+async function resolveWorkflow({ client, epic, whoami, teamOption, workflowOption }) {
+  const warnings = [];
+  const memberWorkflowId = Number(whoami?.default_workflow?.id) || undefined;
+
+  if (workflowOption !== undefined) {
+    return {
+      workflowId: integer(workflowOption, "--workflow", { required: true }),
+      workflowSource: "workflow-option",
+      team: undefined,
+      warnings,
+    };
+  }
+
+  const epicTeams = nestedEntities(epic.teams);
+  if (epicTeams.length > 1 && !teamOption) {
+    warnings.push(
+      `Epic has ${epicTeams.length} teams; using ${epicTeams[0]?.name ?? epicTeams[0]?.id}. Pass --team to choose another.`,
+    );
+  }
+  const teamId = teamOption ?? epicTeams[0]?.id;
+  const source = teamOption ? "team-option" : "epic-team";
+
+  if (teamId) {
+    try {
+      const team = await client.getTeam(teamId);
+      const teamWorkflowId = Number(team?.default_workflow?.id) || undefined;
+      if (teamWorkflowId) {
+        return { workflowId: teamWorkflowId, workflowSource: source, team, warnings };
+      }
+      warnings.push(
+        `Team ${team?.name ?? teamId} has no default workflow; falling back to the member default.`,
+      );
+      return { workflowId: memberWorkflowId, workflowSource: "member", team, warnings };
+    } catch (error) {
+      warnings.push(
+        `Could not read team ${teamId} (${error.message}); falling back to the member default workflow.`,
+      );
+    }
+  }
+
+  return {
+    workflowId: memberWorkflowId,
+    workflowSource: "member",
+    team: undefined,
+    warnings,
+  };
+}
+
 export async function initCommand(parsed, context) {
   const { config, makeClient, cwd = process.cwd() } = context;
   requireToken(config);
@@ -147,7 +202,13 @@ export async function initCommand(parsed, context) {
     client.listWorkflowStates(),
     client.getEpic(requireEpic(config)),
   ]);
-  const workflowId = Number(whoami?.default_workflow?.id);
+  const { workflowId, workflowSource, team, warnings } = await resolveWorkflow({
+    client,
+    epic,
+    whoami,
+    teamOption: text(parsed.options, "team"),
+    workflowOption: option(parsed.options, "workflow"),
+  });
   const workflowStates = states.filter(
     (state) => !workflowId || Number(state.workflow?.id) === workflowId,
   );
@@ -171,10 +232,11 @@ export async function initCommand(parsed, context) {
       states: candidates.map(({ id, name, type }) => ({ id, name, type })),
     });
   }
+  const teamId = config.teamId ?? (team ? String(team.id) : undefined);
   const document = {
     workspace,
     epic_id: Number(epic.id),
-    ...(config.teamId ? { team_id: config.teamId } : {}),
+    ...(teamId ? { team_id: teamId } : {}),
     states: {
       ready: Number(ready),
       started: Number(started),
@@ -212,6 +274,13 @@ export async function initCommand(parsed, context) {
     config_file: written,
     workspace,
     epic: { id: Number(epic.id), name: epic.name },
+    workflow: {
+      id: workflowId ?? null,
+      name: workflowName(states, workflowId),
+      source: workflowSource,
+    },
+    team: team ? { id: String(team.id), name: team.name } : null,
+    warnings,
     ...(localWritten
       ? { local_config_file: localWritten, agent_id: String(agentToPersist) }
       : {}),

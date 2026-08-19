@@ -88,8 +88,21 @@ shortcut-agent init --epic 12345
 
 `init` calls v4 `whoami`, discovers the workspace slug and workflow states, and
 writes the shared project scope to `.shortcut-agent.json`. It chooses state IDs
-by semantic state type rather than assuming state names. Explicit state IDs can
-override discovery:
+by semantic state type rather than assuming state names.
+
+Workflow discovery follows the Epic, not the person running the command:
+
+1. `--workflow ID`, when given
+2. the default workflow of `--team`, when given
+3. the default workflow of the Epic's own team
+4. the authenticated member's default workflow
+
+Steps 1-3 matter because a member's default workflow is frequently not the one
+their team plans in, and picking the wrong one puts every created Story on the
+wrong board. `init` reports the chosen workflow and the `source` that selected
+it, and adopts the Epic's team as `team_id` unless `--team` says otherwise.
+
+Explicit state IDs still override everything above:
 
 ```sh
 shortcut-agent init \

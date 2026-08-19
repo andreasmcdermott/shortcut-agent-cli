@@ -12,12 +12,19 @@ function capture() {
   return { write: (value) => (text += value), value: () => text };
 }
 
+const STATE_WORKFLOW = { 1: 50, 2: 50, 3: 50, 4: 60, 5: 60, 6: 60 };
+const STATE_NAMES = {
+  1: ["Ready", "unstarted"],
+  2: ["Doing", "started"],
+  3: ["Done", "done"],
+  4: ["Beta Ready", "unstarted"],
+  5: ["Beta Doing", "started"],
+  6: ["Beta Done", "done"],
+};
+
 function fullState(id) {
-  return {
-    id,
-    name: id === 1 ? "Ready" : id === 2 ? "Doing" : "Done",
-    type: id === 1 ? "unstarted" : id === 2 ? "started" : "done",
-  };
+  const [name, type] = STATE_NAMES[id] ?? ["Done", "done"];
+  return { id, name, type };
 }
 
 function makeStory(id, stateId = 1, overrides = {}) {
@@ -36,6 +43,27 @@ function makeStory(id, stateId = 1, overrides = {}) {
     ...overrides,
   };
 }
+
+const TEAMS = {
+  "team-1": { id: "team-1", name: "Alpha", default_workflow: { id: 50, name: "Alpha Flow" } },
+  "team-2": { id: "team-2", name: "Beta", default_workflow: { id: 60, name: "Beta Flow" } },
+};
+
+const EPICS = {
+  99: {
+    id: 99,
+    name: "Agent Project",
+    description: "Goal",
+    teams: { entities: [{ id: "team-1", name: "Alpha" }] },
+  },
+  98: {
+    id: 98,
+    name: "Beta Project",
+    description: "Goal",
+    teams: { entities: [{ id: "team-2", name: "Beta" }] },
+  },
+  97: { id: 97, name: "Teamless Project", description: "Goal", teams: { entities: [] } },
+};
 
 async function readBody(request) {
   const chunks = [];
@@ -73,15 +101,23 @@ async function mockShortcut() {
     }
     if (url.pathname === "/api/v4/acme/workflow-states") {
       return send({
-        entities: [
-          { ...fullState(1), workflow: { id: 50 } },
-          { ...fullState(2), workflow: { id: 50 } },
-          { ...fullState(3), workflow: { id: 50 } },
-        ],
+        entities: [1, 2, 3, 4, 5, 6].map((id) => ({
+          ...fullState(id),
+          workflow: { id: STATE_WORKFLOW[id] },
+        })),
       });
     }
-    if (url.pathname === "/api/v4/acme/epics/99") {
-      return send({ entity: { id: 99, name: "Agent Project", description: "Goal" } });
+    const teamMatch = url.pathname.match(/^\/api\/v4\/acme\/teams\/([\w-]+)$/);
+    if (teamMatch) {
+      const team = TEAMS[teamMatch[1]];
+      if (!team) return send({ message: "No such team" }, 404);
+      return send({ entity: team });
+    }
+    const epicMatch = url.pathname.match(/^\/api\/v4\/acme\/epics\/(\d+)$/);
+    if (epicMatch) {
+      const epic = EPICS[Number(epicMatch[1])];
+      if (!epic) return send({ message: "No such epic" }, 404);
+      return send({ entity: epic });
     }
     if (url.pathname === "/api/v4/acme/epics/99/stories") {
       return send({ entities: [...stories.values()] });
@@ -392,4 +428,79 @@ test("claims surfaces owned Stories that carry no claim comment", async (t) => {
   assert.ok(claim, "owned Story must be reported");
   assert.equal(claim.unattributed, true);
   assert.equal(claim.agent_id, null);
+});
+
+async function initFixture(t) {
+  const mock = await mockShortcut();
+  t.after(() => mock.instance.close());
+  const directory = await mkdtemp(path.join(tmpdir(), "shortcut-agent-wf-test-"));
+  return {
+    mock,
+    directory,
+    env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl },
+  };
+}
+
+async function readSharedConfig(directory) {
+  return JSON.parse(await readFile(path.join(directory, ".shortcut-agent.json"), "utf8"));
+}
+
+test("init resolves states from the Epic team's workflow, not the member's", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(["init", "--epic", "98"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.deepEqual(
+    config.states,
+    { ready: 4, started: 5, done: 6, cancelled: 6 },
+    "must use the team's Beta Flow, not the member's default workflow 50",
+  );
+});
+
+test("init falls back to the member's default workflow when the Epic has no team", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(["init", "--epic", "97"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  assert.equal(result.json.workflow.source, "member");
+});
+
+test("init adopts the Epic's team so created Stories land on it", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(["init", "--epic", "98"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.equal(config.team_id, "team-2");
+});
+
+test("init reports which workflow it selected and where it came from", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(["init", "--epic", "98"], setup);
+  assert.equal(result.json.workflow.id, 60);
+  assert.equal(result.json.workflow.source, "epic-team");
+  assert.equal(result.json.team.id, "team-2");
+});
+
+test("an explicit --team overrides the Epic's own team", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(["init", "--epic", "98", "--team", "team-1"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  assert.equal(config.team_id, "team-1");
+  assert.equal(result.json.workflow.source, "team-option");
+});
+
+test("init still honours explicit state overrides above any workflow discovery", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(
+    ["init", "--epic", "98", "--ready-state", "1", "--started-state", "2"],
+    setup,
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.equal(config.states.ready, 1);
+  assert.equal(config.states.started, 2);
+  assert.equal(config.states.done, 6, "undiscovered states still come from the team workflow");
 });

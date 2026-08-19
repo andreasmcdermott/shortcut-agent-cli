@@ -191,6 +191,12 @@ export class ShortcutClient {
     );
   }
 
+  async getTeam(id) {
+    return unwrapEntity(
+      await this.request("GET", this.workspacePath(`/teams/${id}`)),
+    );
+  }
+
   async listEpicStories(epicId, { fields } = {}) {
     return this.listAll(this.workspacePath(`/epics/${epicId}/stories`), {
       fields: fields ?? STORY_LIST_FIELDS,

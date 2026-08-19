@@ -47,13 +47,21 @@ Calls v4 `whoami`, discovers workspace slug and workflow states **by state type*
 (not by name), and writes `.shortcut-agent.json`. Prefers states in the member's
 default workflow.
 
-State discovery: `ready` ← first `unstarted`, else `backlog`. `started` ← first
-`started`. `done` ← first `done` matching /done|complete|finish/i, else any
-`done`. `cancelled` ← first `done` matching /cancel|won't|wont|abandon/i, else
-falls back to `done`.
+Workflow selection follows the Epic, not the caller: `--workflow ID`, else the
+default workflow of `--team`, else the Epic's own team's default workflow, else
+the authenticated member's default. The result is reported as `workflow.id` /
+`workflow.name` / `workflow.source`, and the Epic's team is adopted as `team_id`
+unless `--team` overrides it. **Check `workflow.source` after running init** —
+`member` means the Epic had no team and states came from the caller's personal
+default, which is often the wrong board.
 
-Overrides: `--ready-state ID`, `--started-state ID`, `--done-state ID`,
-`--cancelled-state ID`. Fails with exit 3 if ready/started/done cannot be
+State discovery within that workflow: `ready` ← first `unstarted`, else
+`backlog`. `started` ← first `started`. `done` ← first `done` matching
+/done|complete|finish/i, else any `done`. `cancelled` ← first `done` matching
+/cancel|won't|wont|abandon/i, else falls back to `done`.
+
+Overrides: `--workflow ID`, `--team UUID`, `--ready-state ID`,
+`--started-state ID`, `--done-state ID`, `--cancelled-state ID`. Fails with exit 3 if ready/started/done cannot be
 resolved.
 
 `--agent ID` writes identity to `.shortcut-agent.local.json` (git-ignored), not

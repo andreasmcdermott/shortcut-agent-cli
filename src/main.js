@@ -15,7 +15,7 @@ const HELP = `shortcut-agent ${VERSION}
 Agent-first Shortcut work coordination.
 
 Usage:
-  shortcut-agent init --epic ID [--agent LOCAL_DEFAULT] [state options]
+  shortcut-agent init --epic ID [--team UUID] [--workflow ID] [state options]
   shortcut-agent config
   shortcut-agent doctor
   shortcut-agent create --title TITLE --description TEXT [relations]
@@ -44,6 +44,11 @@ Global options:
   --pretty            Indented JSON output
   -h, --help          Show help
   -V, --version       Show version
+
+Init options:
+  --workflow ID       Discover states from this Workflow, bypassing team lookup
+  --ready-state ID    Explicit state override (also started/done/cancelled)
+  --agent ID          Save a local default agent identity
 
 Edit mutations (distinct from the scope options above):
   --move-to-epic ID   Move the Story to another Epic
