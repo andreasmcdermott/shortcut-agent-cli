@@ -30,6 +30,7 @@ This repository contains an initial, usable implementation of the core workflow:
 - compact Epic context summaries
 - claim attribution and stale-claim reporting
 - configuration diagnostics
+- an optional bb plugin that renders the configured Epic as a live dependency graph
 
 Shortcut REST API v4 is used throughout. Shortcut currently describes v4 as an
 alpha API, so all transport-specific behavior is isolated in `src/client.js` and
@@ -60,6 +61,52 @@ Store the token in the environment; it is never written to project config:
 ```sh
 export SHORTCUT_API_TOKEN='sct_rw_...'
 ```
+
+## bb Epic graph plugin
+
+This repository also contains `bb-plugin-shortcut-epic`, a separate bb plugin
+under `plugins/bb-plugin-shortcut-epic`. It reads the same checked-in
+`.shortcut-agent.json`, fetches the configured Epic through Shortcut v4, and
+adds a **Shortcut Epic** nav panel to bb.
+
+The graph lays out blocking relations from prerequisite to dependent. Started
+work is ring-highlighted, ready and blocked Stories are distinguished, and
+completed work is faded while remaining in the dependency history. Story cards
+open their corresponding Shortcut page. The panel refreshes every 60 seconds
+and remains read-only; lifecycle changes still go through this CLI.
+
+bb supports installing a plugin from a repository subdirectory. From this
+checkout, either install the plugin folder directly:
+
+```sh
+bb plugin install ./plugins/bb-plugin-shortcut-epic
+```
+
+or use the repository's `.bb/plugins.json` collection entry:
+
+```sh
+bb plugin install path:. --plugin shortcut-epic
+```
+
+To install from Git:
+
+```sh
+bb plugin install \
+  git:https://github.com/andreasmcdermott/shortcut-agent-cli.git@main \
+  --plugin shortcut-epic
+```
+
+Then open **Extensions → Plugins → Shortcut Epic** and set its **Shortcut API
+token**. This is a bb secret setting because the shared project config
+deliberately contains no credentials. `SHORTCUT_API_TOKEN` is also accepted
+when it belongs to the bb server process; an export made only inside an agent
+terminal does not change an already-running desktop server.
+
+The optional **Default bb project** setting resolves ambiguity when several bb
+projects contain `.shortcut-agent.json`. Without it, the plugin automatically
+uses the sole configured project. See the
+[plugin README](./plugins/bb-plugin-shortcut-epic/README.md) for Git
+subdirectory installs, configuration behavior, and the development loop.
 
 ## Shortcut model
 
