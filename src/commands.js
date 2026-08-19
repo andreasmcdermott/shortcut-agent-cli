@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
   flag,
   integer,
@@ -15,7 +16,7 @@ import {
   requireState,
   requireToken,
   writeConfig,
-  CONFIG_FILENAME,
+  isGitIgnored,
   LOCAL_CONFIG_FILENAME,
 } from "./config.js";
 import { createAgentEvent, parseAgentEvent } from "./comments.js";
@@ -141,19 +142,18 @@ function workflowName(states, workflowId) {
   return match?.workflow?.name ?? null;
 }
 
+function strictTextOption(options, name) {
+  const value = option(options, name);
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean" || !String(value).trim()) {
+    throw argumentError(`--${name} requires a value`);
+  }
+  return String(value);
+}
+
 async function resolveWorkflow({ client, epic, whoami, teamOption, workflowOption }) {
   const warnings = [];
   const memberWorkflowId = Number(whoami?.default_workflow?.id) || undefined;
-
-  if (workflowOption !== undefined) {
-    return {
-      workflowId: integer(workflowOption, "--workflow", { required: true }),
-      workflowSource: "workflow-option",
-      team: undefined,
-      warnings,
-    };
-  }
-
   const epicTeams = nestedEntities(epic.teams);
   if (epicTeams.length > 1 && !teamOption) {
     warnings.push(
@@ -162,6 +162,31 @@ async function resolveWorkflow({ client, epic, whoami, teamOption, workflowOptio
   }
   const teamId = teamOption ?? epicTeams[0]?.id;
   const source = teamOption ? "team-option" : "epic-team";
+  const selectedTeam = teamOption
+    ? epicTeams.find((item) => String(item.id) === String(teamOption)) ?? {
+        id: teamOption,
+      }
+    : epicTeams[0];
+
+  if (workflowOption !== undefined) {
+    let team = selectedTeam;
+    if (teamOption) {
+      try {
+        team = await client.getTeam(teamOption);
+      } catch (error) {
+        throw configError(`Could not read team ${teamOption}`, {
+          team_id: String(teamOption),
+          reason: error.message,
+        });
+      }
+    }
+    return {
+      workflowId: integer(workflowOption, "--workflow", { required: true }),
+      workflowSource: "workflow-option",
+      team,
+      warnings,
+    };
+  }
 
   if (teamId) {
     try {
@@ -175,26 +200,48 @@ async function resolveWorkflow({ client, epic, whoami, teamOption, workflowOptio
       );
       return { workflowId: memberWorkflowId, workflowSource: "member", team, warnings };
     } catch (error) {
+      if (teamOption) {
+        throw configError(`Could not read team ${teamId}`, {
+          team_id: String(teamId),
+          reason: error.message,
+        });
+      }
       warnings.push(
-        `Could not read team ${teamId} (${error.message}); falling back to the member default workflow.`,
+        `Could not read team ${teamId} (${error.message}); falling back to the member default workflow without adopting the team.`,
       );
+      return {
+        workflowId: memberWorkflowId,
+        workflowSource: "member",
+        team: undefined,
+        warnings,
+      };
     }
   }
 
   return {
     workflowId: memberWorkflowId,
     workflowSource: "member",
-    team: undefined,
+    team: selectedTeam,
     warnings,
   };
 }
 
 export async function initCommand(parsed, context) {
-  const { config, makeClient, cwd = process.cwd() } = context;
+  const { config, makeClient, env = process.env } = context;
+  const workspaceOption = strictTextOption(parsed.options, "workspace");
+  const teamCommandOption = strictTextOption(parsed.options, "team");
+  const requestedAgent = option(parsed.options, "agent");
+  if (
+    requestedAgent !== undefined &&
+    (typeof requestedAgent === "boolean" || !String(requestedAgent).trim())
+  ) {
+    throw argumentError("--agent must not be empty");
+  }
   requireToken(config);
   const discoveryClient = makeClient({ workspace: undefined });
   const whoami = await discoveryClient.whoami();
-  const workspace = option(parsed.options, "workspace") ?? whoami?.workspace?.slug;
+  const workspace =
+    workspaceOption ?? env.SHORTCUT_WORKSPACE ?? whoami?.workspace?.slug;
   if (!workspace) throw configError("Shortcut whoami did not return a workspace slug");
 
   const client = makeClient({ workspace });
@@ -202,37 +249,50 @@ export async function initCommand(parsed, context) {
     client.listWorkflowStates(),
     client.getEpic(requireEpic(config)),
   ]);
+  const teamOption = teamCommandOption ?? env.SHORTCUT_TEAM_ID;
   const { workflowId, workflowSource, team, warnings } = await resolveWorkflow({
     client,
     epic,
     whoami,
-    teamOption: text(parsed.options, "team"),
+    teamOption,
     workflowOption: option(parsed.options, "workflow"),
   });
   const workflowStates = states.filter(
     (state) => !workflowId || Number(state.workflow?.id) === workflowId,
   );
-  const candidates = workflowStates.length ? workflowStates : states;
+  if (workflowId && workflowStates.length === 0) {
+    throw configError(`Workflow ${workflowId} has no discoverable states`, {
+      workflow_id: workflowId,
+    });
+  }
+  const candidates = workflowId ? workflowStates : states;
   const choose = (type, namePattern) =>
     candidates.find(
       (state) =>
         state.type === type && (!namePattern || namePattern.test(state.name ?? "")),
     ) ?? candidates.find((state) => state.type === type);
 
+  const stateOverride = (name) => {
+    const value = option(parsed.options, `${name}-state`);
+    return value === undefined ? undefined : integer(value, `${name} state ID`);
+  };
   const ready =
-    config.states.ready ??
+    stateOverride("ready") ??
     choose("unstarted")?.id ??
     choose("backlog")?.id;
-  const started = config.states.started ?? choose("started")?.id;
-  const done = config.states.done ?? choose("done", /done|complete|finish/i)?.id;
+  const started = stateOverride("started") ?? choose("started")?.id;
+  const done =
+    stateOverride("done") ?? choose("done", /done|complete|finish/i)?.id;
   const cancelled =
-    config.states.cancelled ?? choose("done", /cancel|won't|wont|abandon/i)?.id ?? done;
+    stateOverride("cancelled") ??
+    choose("done", /cancel|won't|wont|abandon/i)?.id ??
+    done;
   if (!ready || !started || !done) {
     throw configError("Could not discover required ready, started, and done states", {
       states: candidates.map(({ id, name, type }) => ({ id, name, type })),
     });
   }
-  const teamId = config.teamId ?? (team ? String(team.id) : undefined);
+  const teamId = teamOption ?? (team ? String(team.id) : undefined);
   const document = {
     workspace,
     epic_id: Number(epic.id),
@@ -244,34 +304,91 @@ export async function initCommand(parsed, context) {
       cancelled: Number(cancelled),
     },
   };
-  const filename =
-    option(parsed.options, "config") ??
-    config.filename ??
-    path.join(cwd, CONFIG_FILENAME);
-  const written = await writeConfig(filename, document);
-  const requestedAgent = option(parsed.options, "agent");
+
+  const force = flag(parsed.options, "force");
+  const merge = flag(parsed.options, "merge");
+  if (force && merge) {
+    throw argumentError("Use either --force or --merge, not both");
+  }
+  const {
+    agent_id: legacyAgent,
+    workspace: _existingWorkspace,
+    epic_id: _existingEpic,
+    team_id: _existingTeam,
+    states: existingStates,
+    ...extraConfig
+  } = config.raw;
+  const mergedDocument = {
+    ...extraConfig,
+    ...document,
+    states: { ...existingStates, ...document.states },
+  };
+  let documentToWrite = document;
+  if (config.exists && !isDeepStrictEqual(config.raw, document)) {
+    if (merge) documentToWrite = mergedDocument;
+    else if (!force) {
+      const summarize = (value) => ({
+        workspace: value.workspace,
+        epic_id: value.epic_id,
+        team_id: value.team_id,
+        states: value.states,
+      });
+      throw configError(
+        "Config already exists and differs; rerun with --merge to preserve extra keys or --force to replace it",
+        {
+          config_file: config.filename,
+          existing: summarize(config.raw),
+          proposed: summarize(document),
+        },
+      );
+    }
+  } else if (merge) {
+    documentToWrite = mergedDocument;
+  }
+  const unchanged = config.exists && isDeepStrictEqual(config.raw, documentToWrite);
+  const written = unchanged
+    ? config.filename
+    : await writeConfig(config.filename, documentToWrite, {
+        overwrite: config.exists,
+        ...(config.exists ? { expected: config.raw } : {}),
+      });
+  if (config.source === "ancestor" && !unchanged) {
+    warnings.push(`Updated discovered ancestor config: ${written}`);
+  }
+
   const agentToPersist =
     requestedAgent ??
-    (config.agentSource === "project-config" ? config.agentId : undefined);
+    (config.localRaw.agent_id === undefined ? legacyAgent : undefined);
   let localWritten;
   if (agentToPersist !== undefined) {
-    if (agentToPersist === true || !String(agentToPersist).trim()) {
-      throw argumentError("--agent must not be empty");
-    }
     const localTarget = path.join(path.dirname(written), LOCAL_CONFIG_FILENAME);
     const existingLocal =
       config.localFilename && path.resolve(config.localFilename) === path.resolve(localTarget)
         ? config.localRaw
         : {};
-    localWritten = await writeConfig(localTarget, {
-      ...existingLocal,
-      agent_id: String(agentToPersist),
-    });
+    localWritten = await writeConfig(
+      localTarget,
+      {
+        ...existingLocal,
+        agent_id: String(agentToPersist),
+      },
+      {
+        overwrite: Boolean(config.localFilename),
+        ...(config.localFilename ? { expected: config.localRaw } : {}),
+      },
+    );
+    if (!(await isGitIgnored(localWritten))) {
+      warnings.push(
+        `${LOCAL_CONFIG_FILENAME} is not ignored by Git; add it to .gitignore or .git/info/exclude`,
+      );
+    }
   }
   return {
     ok: true,
     command: "init",
     config_file: written,
+    config_source: config.source,
+    unchanged,
     workspace,
     epic: { id: Number(epic.id), name: epic.name },
     workflow: {

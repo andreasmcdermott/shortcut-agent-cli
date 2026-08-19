@@ -134,8 +134,21 @@ shortcut-agent init --epic 12345
 ```
 
 `init` calls v4 `whoami`, discovers the workspace slug and workflow states, and
-writes the shared project scope to `.shortcut-agent.json`. It chooses state IDs
-by semantic state type rather than assuming state names.
+writes the shared project scope to `.shortcut-agent.json` in the current working
+directory. It chooses state IDs by semantic state type rather than assuming
+state names. Unlike read commands, `init` does not reuse a discovered ancestor
+config unless `--update-discovered` is explicitly supplied.
+
+Initialization is create-only by default. If the target already exists and the
+discovered document differs, `init` exits with code 3 and reports the existing
+and proposed scope without changing the file. Use `--merge` to refresh known
+scope and state fields while preserving extra keys such as `api_url`, or
+`--force` to replace the document. Reinitialization always rediscovers all
+workflow states; use the explicit state options to pin individual IDs.
+
+`--config PATH` and `SHORTCUT_AGENT_CONFIG` may name a file that does not exist
+when used with `init`. Other commands continue to treat a missing explicit
+config as an error.
 
 Workflow discovery follows the Epic, not the person running the command:
 
@@ -176,10 +189,18 @@ Example configuration:
 }
 ```
 
-The project config is discovered by walking from the current directory toward
-the filesystem root. Use `--config PATH` to select one explicitly. When present,
-an adjacent `.shortcut-agent.local.json` is layered over it and is ignored by
-Git. This provides a personal fallback without putting identity in shared config.
+Read commands discover project config by walking upward from the current
+directory. Discovery stops after checking the first directory containing `.git`
+(a directory in normal checkouts or a file in linked worktrees). For non-Git
+paths under the user's home it stops at home; outside both Git and home it checks
+only cwd. Use `--config PATH` or `SHORTCUT_AGENT_CONFIG` to select one explicitly.
+Successful JSON output includes `config_file` and
+`config_source` (`cwd`, `ancestor`, `explicit`, `env`, or `none`).
+
+When present, an adjacent `.shortcut-agent.local.json` is layered over the
+shared config. This provides a personal fallback without putting identity in
+shared config. The local file **must** be ignored by Git; `init --agent` warns
+when Git does not report it ignored.
 
 The project config contains no credential or agent identity and may be committed
 when a repository always maps to the same Epic. To save a local default agent,
@@ -200,8 +221,8 @@ identity separately:
 
 For parallel agents in the same folder, do not use one local default. Give each
 process its own `SHORTCUT_AGENT_ID` and `SHORTCUT_AGENT_RUN_ID` instead.
-Rerunning `init` against an older project config migrates its legacy `agent_id`
-into the ignored local file.
+Rerunning `init --merge` (or `--force`) against an older project config migrates
+its legacy `agent_id` into the local file and removes it from shared config.
 
 Configuration precedence is:
 
@@ -215,6 +236,7 @@ Supported environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `SHORTCUT_API_TOKEN` | Required v4 token |
+| `SHORTCUT_AGENT_CONFIG` | Explicit config path (command-line `--config` wins) |
 | `SHORTCUT_API_URL` | API base URL; primarily useful for tests/proxies |
 | `SHORTCUT_WORKSPACE` | Workspace slug override |
 | `SHORTCUT_EPIC_ID` | Default Epic ID |
@@ -460,8 +482,12 @@ require a Shortcut token or network access.
 ## Security and operational notes
 
 - Never commit `SHORTCUT_API_TOKEN` or put it in either config file.
-- `.shortcut-agent.local.json` is ignored because it may contain a personal
-  default identity; `.shortcut-agent.json` is safe to share.
+- `.shortcut-agent.local.json` may contain a personal default identity and must
+  be ignored by the target repository; `init --agent` warns when it is not.
+  `.shortcut-agent.json` is safe to share.
+- Config writes use a same-directory temporary file, a short-lived write lock,
+  and atomic publish/replace operations, so concurrent readers never observe a
+  partial JSON document and concurrent init updates reject stale snapshots.
 - A v4 read/write token acts as its Shortcut member; shared tokens also share the
   same Story owner identity.
 - Comments identify the agent run but are not locks and are not used as the sole

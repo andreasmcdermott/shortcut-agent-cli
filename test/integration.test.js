@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { once } from "node:events";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { run } from "../src/main.js";
@@ -305,6 +305,240 @@ test("init discovers workspace and semantic workflow states", async (t) => {
   );
 });
 
+test("init from a nested directory leaves an ancestor config untouched", async (t) => {
+  const mock = await mockShortcut();
+  t.after(() => mock.instance.close());
+  const root = await mkdtemp(path.join(tmpdir(), "shortcut-agent-nested-init-test-"));
+  const nested = path.join(root, "backend");
+  await mkdir(nested);
+  const ancestorFilename = path.join(root, ".shortcut-agent.json");
+  const ancestor = {
+    workspace: "other",
+    epic_id: 123,
+    api_url: "https://example.invalid",
+    states: { ready: 11, started: 12, done: 13 },
+  };
+  await writeFile(ancestorFilename, JSON.stringify(ancestor));
+
+  const result = await invoke(
+    ["init", "--epic", "99"],
+    {
+      directory: nested,
+      env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl },
+    },
+  );
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.deepEqual(JSON.parse(await readFile(ancestorFilename, "utf8")), ancestor);
+  assert.equal(result.json.config_file, path.join(nested, ".shortcut-agent.json"));
+  assert.equal(result.json.config_source, "cwd");
+  assert.equal(JSON.parse(await readFile(result.json.config_file, "utf8")).epic_id, 99);
+});
+
+test("init updates an ancestor config only with --update-discovered", async (t) => {
+  const mock = await mockShortcut();
+  t.after(() => mock.instance.close());
+  const root = await mkdtemp(path.join(tmpdir(), "shortcut-agent-discovered-init-test-"));
+  const nested = path.join(root, "backend");
+  await mkdir(nested);
+  await writeFile(path.join(root, ".git"), "gitdir: /tmp/example\n");
+  const ancestorFilename = path.join(root, ".shortcut-agent.json");
+  await writeFile(
+    ancestorFilename,
+    JSON.stringify({
+      workspace: "acme",
+      epic_id: 99,
+      api_url: "https://proxy.example",
+      states: { ready: 1, started: 2, done: 3, cancelled: 3 },
+    }),
+  );
+
+  const result = await invoke(
+    ["init", "--epic", "98", "--update-discovered", "--merge"],
+    {
+      directory: nested,
+      env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl },
+    },
+  );
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.json.config_file, ancestorFilename);
+  assert.equal(result.json.config_source, "ancestor");
+  assert.equal(JSON.parse(await readFile(ancestorFilename, "utf8")).epic_id, 98);
+  await assert.rejects(readFile(path.join(nested, ".shortcut-agent.json"), "utf8"), {
+    code: "ENOENT",
+  });
+});
+
+test("invalid --agent fails before init writes shared config", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(["init", "--epic", "99", "--agent"], setup);
+  assert.equal(result.exitCode, 2);
+  assert.match(JSON.parse(result.stderr).error.message, /--agent/);
+  await assert.rejects(
+    readFile(path.join(setup.directory, ".shortcut-agent.json"), "utf8"),
+    { code: "ENOENT" },
+  );
+});
+
+test("bare init text options fail before writing config", async (t) => {
+  const setup = await initFixture(t);
+  for (const name of ["workspace", "team"]) {
+    const result = await invoke(["init", "--epic", "99", `--${name}`], setup);
+    assert.equal(result.exitCode, 2, `${name}: ${result.stderr}`);
+    assert.match(JSON.parse(result.stderr).error.message, new RegExp(`--${name}`));
+  }
+  await assert.rejects(
+    readFile(path.join(setup.directory, ".shortcut-agent.json"), "utf8"),
+    { code: "ENOENT" },
+  );
+});
+
+test("init can create a missing explicitly named config", async (t) => {
+  const setup = await initFixture(t);
+  const filename = path.join(setup.directory, "worker.json");
+  const result = await invoke(
+    ["init", "--epic", "99", "--config", filename],
+    setup,
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.json.config_file, filename);
+  assert.equal(result.json.config_source, "explicit");
+  assert.equal(JSON.parse(await readFile(filename, "utf8")).epic_id, 99);
+});
+
+test("init refuses a differing existing config without an explicit update mode", async (t) => {
+  const setup = await initFixture(t);
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  const existing = {
+    workspace: "acme",
+    epic_id: 99,
+    team_id: "team-1",
+    api_url: "https://proxy.example",
+    custom: { retain: true },
+    states: { ready: 1, started: 2, done: 3, cancelled: 3 },
+  };
+  await writeFile(filename, JSON.stringify(existing));
+
+  const result = await invoke(["init", "--epic", "98"], setup);
+  assert.equal(result.exitCode, 3);
+  const error = JSON.parse(result.stderr).error;
+  assert.equal(error.code, "invalid_configuration");
+  assert.equal(error.details.config_file, filename);
+  assert.equal(error.details.existing.epic_id, 99);
+  assert.equal(error.details.proposed.epic_id, 98);
+  assert.deepEqual(JSON.parse(await readFile(filename, "utf8")), existing);
+});
+
+test("init --merge refreshes scope and states while preserving extra keys", async (t) => {
+  const setup = await initFixture(t);
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  await writeFile(
+    filename,
+    JSON.stringify({
+      workspace: "acme",
+      epic_id: 99,
+      team_id: "team-1",
+      api_url: "https://proxy.example",
+      custom: { retain: true },
+      states: { ready: 1, started: 2, done: 3, cancelled: 3, review: 7 },
+    }),
+  );
+
+  const result = await invoke(["init", "--epic", "98", "--merge"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = JSON.parse(await readFile(filename, "utf8"));
+  assert.equal(config.epic_id, 98);
+  assert.equal(config.team_id, "team-2");
+  assert.deepEqual(config.custom, { retain: true });
+  assert.equal(config.api_url, "https://proxy.example");
+  assert.deepEqual(config.states, {
+    ready: 4,
+    started: 5,
+    done: 6,
+    cancelled: 6,
+    review: 7,
+  });
+});
+
+test("init --merge removes a stale known team while preserving unknown keys", async (t) => {
+  const setup = await initFixture(t);
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  await writeFile(
+    filename,
+    JSON.stringify({
+      workspace: "acme",
+      epic_id: 98,
+      team_id: "team-2",
+      custom: true,
+      states: { ready: 4, started: 5, done: 6, cancelled: 6 },
+    }),
+  );
+
+  const result = await invoke(["init", "--epic", "97", "--merge"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = JSON.parse(await readFile(filename, "utf8"));
+  assert.equal(Object.hasOwn(config, "team_id"), false);
+  assert.equal(config.custom, true);
+  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+});
+
+test("init migration preserves an existing higher-precedence local agent", async (t) => {
+  const setup = await initFixture(t);
+  const sharedFilename = path.join(setup.directory, ".shortcut-agent.json");
+  const localFilename = path.join(setup.directory, ".shortcut-agent.local.json");
+  await writeFile(
+    sharedFilename,
+    JSON.stringify({
+      workspace: "acme",
+      epic_id: 99,
+      agent_id: "legacy-agent",
+      states: { ready: 1, started: 2, done: 3, cancelled: 3 },
+    }),
+  );
+  await writeFile(localFilename, JSON.stringify({ agent_id: "local-agent" }));
+
+  const result = await invoke(["init", "--epic", "99", "--merge"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(JSON.parse(await readFile(localFilename, "utf8")).agent_id, "local-agent");
+  assert.equal(
+    Object.hasOwn(JSON.parse(await readFile(sharedFilename, "utf8")), "agent_id"),
+    false,
+  );
+});
+
+test("init --force replaces extra keys and refreshes all discovered states", async (t) => {
+  const setup = await initFixture(t);
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  await writeFile(
+    filename,
+    JSON.stringify({
+      workspace: "acme",
+      epic_id: 99,
+      api_url: "https://proxy.example",
+      states: { ready: 1, started: 2, done: 3, cancelled: 3 },
+    }),
+  );
+
+  const result = await invoke(["init", "--epic", "98", "--force"], setup);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = JSON.parse(await readFile(filename, "utf8"));
+  assert.equal(config.epic_id, 98);
+  assert.deepEqual(config.states, { ready: 4, started: 5, done: 6, cancelled: 6 });
+  assert.equal(Object.hasOwn(config, "api_url"), false);
+});
+
+test("successful commands report config provenance", async (t) => {
+  const setup = await fixture(t);
+  const nested = path.join(setup.directory, "backend");
+  await mkdir(nested);
+  await writeFile(path.join(setup.directory, ".git"), "gitdir: /tmp/example\n");
+  const result = await invoke(["ready"], { ...setup, directory: nested });
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.json.config_file, path.join(setup.directory, ".shortcut-agent.json"));
+  assert.equal(result.json.config_source, "ancestor");
+});
+
 test("init stores an explicitly requested agent only in ignored local config", async (t) => {
   const mock = await mockShortcut();
   t.after(() => mock.instance.close());
@@ -325,6 +559,7 @@ test("init stores an explicitly requested agent only in ignored local config", a
   );
   assert.equal(Object.hasOwn(shared, "agent_id"), false);
   assert.equal(local.agent_id, "worker-7");
+  assert.match(result.json.warnings.join("\n"), /not ignored by Git/);
 });
 
 test("dependency addition is directional and idempotent", async (t) => {
@@ -490,6 +725,43 @@ test("an explicit --team overrides the Epic's own team", async (t) => {
   assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
   assert.equal(config.team_id, "team-1");
   assert.equal(result.json.workflow.source, "team-option");
+});
+
+test("an explicit workflow still adopts the Epic team", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(
+    ["init", "--epic", "98", "--workflow", "60"],
+    setup,
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.equal(config.team_id, "team-2");
+  assert.deepEqual(config.states, { ready: 4, started: 5, done: 6, cancelled: 6 });
+});
+
+test("init rejects an explicit workflow with no discoverable states", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(
+    ["init", "--epic", "98", "--workflow", "999"],
+    setup,
+  );
+  assert.equal(result.exitCode, 3);
+  assert.match(JSON.parse(result.stderr).error.message, /Workflow 999/);
+});
+
+test("init rejects an explicit team that cannot be resolved", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(
+    ["init", "--epic", "98", "--team", "missing-team", "--workflow", "60"],
+    setup,
+  );
+  assert.equal(result.exitCode, 3);
+  const error = JSON.parse(result.stderr).error;
+  assert.match(error.message, /Could not read team missing-team/);
+  await assert.rejects(
+    readFile(path.join(setup.directory, ".shortcut-agent.json"), "utf8"),
+    { code: "ENOENT" },
+  );
 });
 
 test("init still honours explicit state overrides above any workflow discovery", async (t) => {
