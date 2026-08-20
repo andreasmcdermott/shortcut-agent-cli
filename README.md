@@ -30,7 +30,7 @@ This repository contains an initial, usable implementation of the core workflow:
 - compact Epic context summaries
 - claim attribution and stale-claim reporting
 - configuration diagnostics
-- an optional Shortcut Agent bb plugin that renders the configured Epic as a live dependency graph
+- an optional Shortcut Agent bb plugin that renders the configured Epic, registers a server-side `bb shortcut-agent` command, and exposes schema-validated native agent tools
 
 Shortcut REST API v4 is used throughout. Shortcut currently describes v4 as an
 alpha API, so all transport-specific behavior is isolated in `src/client.js` and
@@ -88,8 +88,25 @@ header toggle to restore the faded history. Zoom controls and a **Fit** action
 help navigate large graphs. Story cards open their corresponding Shortcut page.
 The **Epic ID** control switches the active Epic, puts that
 selection in the panel URL, and remembers the last opened Epic per bb project in
-the current browser. The panel refreshes every 60 seconds and remains read-only;
-lifecycle changes still go through this CLI.
+the current browser. The graph itself remains read-only and refreshes every 60
+seconds.
+
+The plugin also runs the CLI workflow inside the bb server, where it can use the
+same secret token without exposing that token to agents, the frontend, shell, or
+project files:
+
+```sh
+bb shortcut-agent show 319163
+bb shortcut-agent ready
+bb shortcut-agent create --title 'Follow-up' --description 'Self-contained work'
+bb shortcut-agent dep add 319163 --blocked-by 319100
+```
+
+Agents additionally receive schema-validated native tools for Epic context,
+Story reads, create/edit, dependency addition, and start/complete/release
+lifecycle operations. These tools avoid shell quoting mistakes while reusing the
+same client, ownership checks, cycle detection, and lifecycle implementation as
+the standalone CLI.
 
 bb supports installing a plugin from a repository subdirectory. From this
 checkout, either install the plugin folder directly:
@@ -119,8 +136,13 @@ when it belongs to the bb server process; an export made only inside an agent
 terminal does not change an already-running desktop server.
 
 The optional **Default bb project** setting resolves ambiguity when several bb
-projects contain `.shortcut-agent.json`. Without it, the plugin automatically
-uses the sole configured project. See the
+projects contain `.shortcut-agent.json`. Without it, each invocation uses its
+current bb project, or the plugin automatically uses the sole configured
+project. Mutations from both `bb shortcut-agent` and native tools require the
+**Enable agent mutations** setting, which defaults off. Read commands and tools
+remain available while mutations are disabled. Lifecycle calls derive a stable
+agent identity from the invoking bb thread unless `--agent` / `agentId` is
+supplied. See the
 [plugin README](./plugins/bb-plugin-shortcut-epic/README.md) for Git
 subdirectory installs, configuration behavior, and the development loop.
 

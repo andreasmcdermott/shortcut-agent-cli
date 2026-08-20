@@ -22,6 +22,35 @@ transcript — is the coordination medium.
 Output is JSON on stdout. Parse it. Add `--pretty` while debugging, `--human`
 only when reporting to a person.
 
+## Inside bb
+
+When the Shortcut Agent bb plugin is installed, prefer its native tools when
+they are available:
+
+- `shortcut_agent_context`, `shortcut_agent_show`
+- `shortcut_agent_create`, `shortcut_agent_edit`, `shortcut_agent_add_dependency`
+- `shortcut_agent_start`, `shortcut_agent_complete`, `shortcut_agent_release`
+
+Native arguments are schema-validated and the plugin reads its Shortcut token
+server-side, so the token never enters the agent environment or shell. The
+mutation tools appear only when the user enables **Enable agent mutations** in
+the plugin settings.
+
+For workflows without a dedicated tool, use the registered server-side command:
+
+```sh
+bb shortcut-agent ready
+bb shortcut-agent blocked
+bb shortcut-agent claims --stale
+bb shortcut-agent handoff 456 --summary 'Parser implemented' --release
+```
+
+`bb shortcut-agent` automatically resolves `.shortcut-agent.json` from the
+invoking bb project. It intentionally does not support `init`, `--config`,
+`--api-url`, or `--description-file`; use the standalone CLI for initialization
+and pass inline description text from bb. Lifecycle calls derive agent identity from the current
+bb thread unless an explicit `agentId` / `--agent` is supplied.
+
 ## The five facts that determine correct behavior
 
 Read these before designing any fleet. They are verified against the

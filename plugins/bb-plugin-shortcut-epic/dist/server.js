@@ -11,7 +11,6 @@ var __export = (target, all) => {
 };
 
 // server.ts
-import { Buffer as Buffer2 } from "node:buffer";
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 
 // node_modules/zod/v4/classic/external.js
@@ -695,8 +694,8 @@ function assert(_) {
 }
 function getEnumValues(entries) {
   const numericValues = Object.values(entries).filter((v) => typeof v === "number");
-  const values = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
-  return values;
+  const values2 = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
+  return values2;
 }
 function joinValues(array2, separator = "|") {
   return array2.map((val) => stringifyPrimitive(val)).join(separator);
@@ -780,10 +779,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path) {
-  if (!path)
+function getElementAtPath(obj, path3) {
+  if (!path3)
     return obj;
-  return path.reduce((acc, key) => acc?.[key], obj);
+  return path3.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -1192,11 +1191,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path, issues) {
+function prefixIssues(path3, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path);
+    iss.path.unshift(path3);
     return iss;
   });
 }
@@ -1343,16 +1342,16 @@ function flattenError(error51, mapper = (issue2) => issue2.message) {
 }
 function formatError(error51, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error52, path = []) => {
+  const processError = (error52, path3 = []) => {
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -1379,17 +1378,17 @@ function formatError(error51, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error51, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error52, path = []) => {
+  const processError = (error52, path3 = []) => {
     var _a3, _b;
     for (const issue2 of error52.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -1421,8 +1420,8 @@ function treeifyError(error51, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path) {
+  const path3 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path3) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -1438,14 +1437,14 @@ function toDotPath(_path) {
   return segs.join("");
 }
 function prettifyError(error51) {
-  const lines = [];
+  const lines2 = [];
   const issues = [...error51.issues].sort((a, b) => (a.path ?? []).length - (b.path ?? []).length);
   for (const issue2 of issues) {
-    lines.push(`\u2716 ${issue2.message}`);
+    lines2.push(`\u2716 ${issue2.message}`);
     if (issue2.path?.length)
-      lines.push(`  \u2192 at ${toDotPath(issue2.path)}`);
+      lines2.push(`  \u2192 at ${toDotPath(issue2.path)}`);
   }
-  return lines.join("\n");
+  return lines2.join("\n");
 }
 
 // node_modules/zod/v4/core/parse.js
@@ -2263,9 +2262,9 @@ var Doc = class {
       return;
     }
     const content = arg;
-    const lines = content.split("\n").filter((x) => x);
-    const minIndent = Math.min(...lines.map((x) => x.length - x.trimStart().length));
-    const dedented = lines.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
+    const lines2 = content.split("\n").filter((x) => x);
+    const minIndent = Math.min(...lines2.map((x) => x.length - x.trimStart().length));
+    const dedented = lines2.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
     for (const line of dedented) {
       this.content.push(line);
     }
@@ -2274,8 +2273,8 @@ var Doc = class {
     const F = Function;
     const args = this?.args;
     const content = this?.content ?? [``];
-    const lines = [...content.map((x) => `  ${x}`)];
-    return new F(...args, lines.join("\n"));
+    const lines2 = [...content.map((x) => `  ${x}`)];
+    return new F(...args, lines2.join("\n"));
   }
 };
 
@@ -3240,7 +3239,7 @@ var $ZodUnion = /* @__PURE__ */ $constructor("$ZodUnion", (inst, def) => {
   defineLazy(inst._zod, "optout", () => def.options.some((o) => o._zod.optout === "optional") ? "optional" : void 0);
   defineLazy(inst._zod, "values", () => {
     if (def.options.every((o) => o._zod.values)) {
-      return new Set(def.options.flatMap((option) => Array.from(option._zod.values)));
+      return new Set(def.options.flatMap((option2) => Array.from(option2._zod.values)));
     }
     return void 0;
   });
@@ -3258,8 +3257,8 @@ var $ZodUnion = /* @__PURE__ */ $constructor("$ZodUnion", (inst, def) => {
     }
     let async = false;
     const results = [];
-    for (const option of def.options) {
-      const result = option._zod.run({
+    for (const option2 of def.options) {
+      const result = option2._zod.run({
         value: payload.value,
         issues: []
       }, ctx);
@@ -3313,8 +3312,8 @@ var $ZodXor = /* @__PURE__ */ $constructor("$ZodXor", (inst, def) => {
     }
     let async = false;
     const results = [];
-    for (const option of def.options) {
-      const result = option._zod.run({
+    for (const option2 of def.options) {
+      const result = option2._zod.run({
         value: payload.value,
         issues: []
       }, ctx);
@@ -3338,10 +3337,10 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
   const _super = inst._zod.parse;
   defineLazy(inst._zod, "propValues", () => {
     const propValues = {};
-    for (const option of def.options) {
-      const pv = option._zod.propValues;
+    for (const option2 of def.options) {
+      const pv = option2._zod.propValues;
       if (!pv || Object.keys(pv).length === 0)
-        throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(option)}"`);
+        throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(option2)}"`);
       for (const [k, v] of Object.entries(pv)) {
         if (!propValues[k])
           propValues[k] = /* @__PURE__ */ new Set();
@@ -3356,10 +3355,10 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
     const opts = def.options;
     const map2 = /* @__PURE__ */ new Map();
     for (const o of opts) {
-      const values = o._zod.propValues?.[def.discriminator];
-      if (!values || values.size === 0)
+      const values2 = o._zod.propValues?.[def.discriminator];
+      if (!values2 || values2.size === 0)
         throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(o)}"`);
-      for (const v of values) {
+      for (const v of values2) {
         if (map2.has(v)) {
           throw new Error(`Duplicate discriminator value "${String(v)}"`);
         }
@@ -3617,11 +3616,11 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
       return payload;
     }
     const proms = [];
-    const values = def.keyType._zod.values;
-    if (values) {
+    const values2 = def.keyType._zod.values;
+    if (values2) {
       payload.value = {};
       const recordKeys = /* @__PURE__ */ new Set();
-      for (const key of values) {
+      for (const key of values2) {
         if (typeof key === "string" || typeof key === "number" || typeof key === "symbol") {
           recordKeys.add(typeof key === "number" ? key.toString() : key);
           const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
@@ -3825,10 +3824,10 @@ function handleSetResult(result, final) {
 }
 var $ZodEnum = /* @__PURE__ */ $constructor("$ZodEnum", (inst, def) => {
   $ZodType.init(inst, def);
-  const values = getEnumValues(def.entries);
-  const valuesSet = new Set(values);
+  const values2 = getEnumValues(def.entries);
+  const valuesSet = new Set(values2);
   inst._zod.values = valuesSet;
-  inst._zod.pattern = new RegExp(`^(${values.filter((k) => propertyKeyTypes.has(typeof k)).map((o) => typeof o === "string" ? escapeRegex(o) : o.toString()).join("|")})$`);
+  inst._zod.pattern = new RegExp(`^(${values2.filter((k) => propertyKeyTypes.has(typeof k)).map((o) => typeof o === "string" ? escapeRegex(o) : o.toString()).join("|")})$`);
   inst._zod.parse = (payload, _ctx) => {
     const input = payload.value;
     if (valuesSet.has(input)) {
@@ -3836,7 +3835,7 @@ var $ZodEnum = /* @__PURE__ */ $constructor("$ZodEnum", (inst, def) => {
     }
     payload.issues.push({
       code: "invalid_value",
-      values,
+      values: values2,
       input,
       inst
     });
@@ -3848,12 +3847,12 @@ var $ZodLiteral = /* @__PURE__ */ $constructor("$ZodLiteral", (inst, def) => {
   if (def.values.length === 0) {
     throw new Error("Cannot create literal schema with no valid values");
   }
-  const values = new Set(def.values);
-  inst._zod.values = values;
+  const values2 = new Set(def.values);
+  inst._zod.values = values2;
   inst._zod.pattern = new RegExp(`^(${def.values.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$`);
   inst._zod.parse = (payload, _ctx) => {
     const input = payload.value;
-    if (values.has(input)) {
+    if (values2.has(input)) {
       return payload;
     }
     payload.issues.push({
@@ -7652,8 +7651,8 @@ function ko_default() {
 }
 
 // node_modules/zod/v4/locales/lt.js
-var capitalizeFirstCharacter = (text) => {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+var capitalizeFirstCharacter = (text2) => {
+  return text2.charAt(0).toUpperCase() + text2.slice(1);
 };
 function getUnitTypeFromNumber(number4) {
   const abs = Math.abs(number4);
@@ -11154,8 +11153,8 @@ function _set(Class2, valueType, params) {
   });
 }
 // @__NO_SIDE_EFFECTS__
-function _enum(Class2, values, params) {
-  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+function _enum(Class2, values2, params) {
+  const entries = Array.isArray(values2) ? Object.fromEntries(values2.map((v) => [v, v])) : values2;
   return new Class2({
     type: "enum",
     entries,
@@ -11751,8 +11750,8 @@ function isTransforming(_schema, _ctx) {
     return false;
   }
   if (def.type === "union") {
-    for (const option of def.options) {
-      if (isTransforming(option, ctx))
+    for (const option2 of def.options) {
+      if (isTransforming(option2, ctx))
         return true;
     }
     return false;
@@ -11902,12 +11901,12 @@ var dateProcessor = (_schema, ctx, _json, _params) => {
 };
 var enumProcessor = (schema, _ctx, json2, _params) => {
   const def = schema._zod.def;
-  const values = getEnumValues(def.entries);
-  if (values.every((v) => typeof v === "number"))
+  const values2 = getEnumValues(def.entries);
+  if (values2.every((v) => typeof v === "number"))
     json2.type = "number";
-  if (values.every((v) => typeof v === "string"))
+  if (values2.every((v) => typeof v === "string"))
     json2.type = "string";
-  json2.enum = values;
+  json2.enum = values2;
 };
 var literalProcessor = (schema, ctx, json2, _params) => {
   const def = schema._zod.def;
@@ -13592,9 +13591,9 @@ var ZodEnum = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   inst.enum = def.entries;
   inst.options = Object.values(def.entries);
   const keys = new Set(Object.keys(def.entries));
-  inst.extract = (values, params) => {
+  inst.extract = (values2, params) => {
     const newEntries = {};
-    for (const value of values) {
+    for (const value of values2) {
       if (keys.has(value)) {
         newEntries[value] = def.entries[value];
       } else
@@ -13607,9 +13606,9 @@ var ZodEnum = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
       entries: newEntries
     });
   };
-  inst.exclude = (values, params) => {
+  inst.exclude = (values2, params) => {
     const newEntries = { ...def.entries };
-    for (const value of values) {
+    for (const value of values2) {
       if (keys.has(value)) {
         delete newEntries[value];
       } else
@@ -13623,8 +13622,8 @@ var ZodEnum = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
     });
   };
 });
-function _enum2(values, params) {
-  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+function _enum2(values2, params) {
+  const entries = Array.isArray(values2) ? Object.fromEntries(values2.map((v) => [v, v])) : values2;
   return new ZodEnum({
     type: "enum",
     entries,
@@ -14114,13 +14113,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path = ref.slice(1).split("/").filter(Boolean);
-  if (path.length === 0) {
+  const path3 = ref.slice(1).split("/").filter(Boolean);
+  if (path3.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path[0] === defsKey) {
-    const key = path[1];
+  if (path3[0] === defsKey) {
+    const key = path3[1];
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -14538,6 +14537,158 @@ var AppError = class extends Error {
     this.details = details;
   }
 };
+function argumentError(message, details = {}) {
+  return new AppError("invalid_arguments", message, { exitCode: 2, details });
+}
+function configError(message, details = {}) {
+  return new AppError("invalid_configuration", message, { exitCode: 3, details });
+}
+function conflictError(code, message, details = {}) {
+  return new AppError(code, message, { exitCode: 4, details });
+}
+function toErrorPayload(error51) {
+  const normalized = error51 instanceof AppError ? error51 : new AppError("unexpected_error", error51?.message ?? String(error51), {
+    exitCode: 6
+  });
+  return {
+    payload: {
+      ok: false,
+      error: {
+        code: normalized.code,
+        message: normalized.message,
+        details: normalized.details
+      }
+    },
+    exitCode: normalized.exitCode
+  };
+}
+
+// ../../src/args.js
+var SHORT_OPTIONS = /* @__PURE__ */ new Map([
+  ["-h", "help"],
+  ["-V", "version"]
+]);
+var BOOLEAN_OPTIONS = /* @__PURE__ */ new Set([
+  "help",
+  "version",
+  "human",
+  "pretty",
+  "include-assigned",
+  "all-comments",
+  "clear-estimate",
+  "clear-team",
+  "force",
+  "merge",
+  "update-discovered",
+  "release",
+  "allow-cross-epic"
+]);
+function addOption(options, key, value) {
+  if (Object.hasOwn(options, key)) {
+    options[key] = Array.isArray(options[key]) ? [...options[key], value] : [options[key], value];
+  } else {
+    options[key] = value;
+  }
+}
+function parseArgv(argv) {
+  const options = {};
+  const positionals = [];
+  let passthrough = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (passthrough) {
+      positionals.push(token);
+      continue;
+    }
+    if (token === "--") {
+      passthrough = true;
+      continue;
+    }
+    if (SHORT_OPTIONS.has(token)) {
+      addOption(options, SHORT_OPTIONS.get(token), true);
+      continue;
+    }
+    if (token.startsWith("--no-") && token.length > 5) {
+      addOption(options, token.slice(5), false);
+      continue;
+    }
+    if (token.startsWith("--")) {
+      const body = token.slice(2);
+      if (!body) throw argumentError("Invalid empty option");
+      const equals = body.indexOf("=");
+      if (equals >= 0) {
+        addOption(options, body.slice(0, equals), body.slice(equals + 1));
+        continue;
+      }
+      if (BOOLEAN_OPTIONS.has(body)) {
+        addOption(options, body, true);
+        continue;
+      }
+      const next = argv[index + 1];
+      if (next !== void 0 && (next === "-" || !next.startsWith("-"))) {
+        addOption(options, body, next);
+        index += 1;
+      } else {
+        addOption(options, body, true);
+      }
+      continue;
+    }
+    if (token.startsWith("-") && token !== "-") {
+      throw argumentError(`Unknown short option: ${token}`);
+    }
+    positionals.push(token);
+  }
+  return {
+    command: positionals[0] ?? (options.help ? "help" : void 0),
+    subcommand: positionals[1],
+    args: positionals.slice(1),
+    options
+  };
+}
+function option(options, key, fallback) {
+  const value = options[key];
+  if (Array.isArray(value)) return value.at(-1);
+  return value === void 0 ? fallback : value;
+}
+function flag(options, key, fallback = false) {
+  const value = option(options, key, fallback);
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  return Boolean(value);
+}
+function text(options, key, fallback) {
+  const value = option(options, key, fallback);
+  return typeof value === "boolean" ? fallback : value;
+}
+function values(options, key) {
+  const raw = options[key];
+  if (raw === void 0 || raw === false) return [];
+  const entries = Array.isArray(raw) ? raw : [raw];
+  return entries.flatMap((entry) => String(entry).split(",")).map((entry) => entry.trim()).filter(Boolean);
+}
+function integer2(value, label, { required: required2 = false } = {}) {
+  if (value === void 0 || value === null || value === "") {
+    if (required2) throw argumentError(`${label} is required`);
+    return void 0;
+  }
+  if (typeof value === "boolean") {
+    throw argumentError(`${label} requires a value`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw argumentError(`${label} must be a positive integer`, { value });
+  }
+  return parsed;
+}
+function storyIds(options, key) {
+  return values(options, key).map((value) => integer2(value, `--${key}`));
+}
+function requirePositional(parsed, index, label) {
+  const value = parsed.args[index];
+  if (value === void 0) throw argumentError(`${label} is required`);
+  return value;
+}
 
 // ../../src/client.js
 var DEFAULT_TIMEOUT_MS = 3e4;
@@ -14597,7 +14748,8 @@ var ShortcutClient = class {
     fetchImpl = globalThis.fetch,
     sleeper = sleep,
     maxRetries = 2,
-    timeoutMs = DEFAULT_TIMEOUT_MS
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal
   }) {
     this.token = token;
     this.workspace = workspace;
@@ -14606,6 +14758,7 @@ var ShortcutClient = class {
     this.sleep = sleeper;
     this.maxRetries = maxRetries;
     this.timeoutMs = timeoutMs;
+    this.signal = signal;
   }
   workspacePath(pathname) {
     if (!this.workspace) {
@@ -14638,7 +14791,7 @@ var ShortcutClient = class {
           method,
           headers,
           body: body === void 0 ? void 0 : JSON.stringify(body),
-          signal: AbortSignal.timeout(this.timeoutMs)
+          signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs)
         });
       } catch (error51) {
         if (method === "GET" && attempt < this.maxRetries) {
@@ -14657,21 +14810,21 @@ var ShortcutClient = class {
       }
       if (response.status === 429 && attempt < this.maxRetries) {
         const retryAfter = Number(response.headers.get("retry-after"));
-        const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1e3, 1e4) : 250 * 2 ** attempt;
-        await this.sleep(delay);
+        const delay2 = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1e3, 1e4) : 250 * 2 ** attempt;
+        await this.sleep(delay2);
         continue;
       }
       if (method === "GET" && response.status >= 500 && attempt < this.maxRetries) {
         await this.sleep(100 * 2 ** attempt);
         continue;
       }
-      const text = response.status === 204 ? "" : await response.text();
+      const text2 = response.status === 204 ? "" : await response.text();
       let payload;
-      if (text) {
+      if (text2) {
         try {
-          payload = JSON.parse(text);
+          payload = JSON.parse(text2);
         } catch {
-          payload = { message: text };
+          payload = { message: text2 };
         }
       }
       if (!response.ok) {
@@ -14762,6 +14915,534 @@ var ShortcutClient = class {
   }
 };
 
+// ../../src/help.js
+var GLOBAL_OPTIONS = [
+  ["--config PATH", "Select a config file"],
+  ["--api-url URL", "Override the Shortcut API URL"],
+  ["--workspace SLUG", "Override workspace"],
+  ["--epic ID", "Select the Epic, overriding any configured default"],
+  ["--team UUID", "Override the configured Team"],
+  ["--agent ID", "Override the stable agent identity"],
+  ["--human", "Concise human-readable output"],
+  ["--pretty", "Indented JSON output"],
+  ["-h, --help", "Show help"],
+  ["-V, --version", "Show version"]
+];
+var COMMANDS = {
+  init: {
+    description: "Discovers the Epic's workflow and writes project configuration.",
+    usage: ["init --epic ID [--team UUID] [--workflow ID] [state options]"],
+    options: [
+      ["--epic ID", "Target Epic"],
+      ["--no-default-epic", "Do not save this Epic as the project default"],
+      ["--team UUID", "Use this Team instead of the Epic's Team"],
+      ["--workflow ID", "Use this Workflow instead of discovering one from the Team"],
+      ["--ready-state ID", "Override the discovered Ready state"],
+      ["--started-state ID", "Override the discovered Started state"],
+      ["--done-state ID", "Override the discovered Done state"],
+      ["--cancelled-state ID", "Override the discovered Cancelled state"],
+      ["--agent ID", "Save a local default agent identity"]
+    ]
+  },
+  config: {
+    description: "Prints the effective configuration and its resolved sources.",
+    usage: ["config"]
+  },
+  doctor: {
+    description: "Checks Shortcut connectivity, workflow states, and configuration.",
+    usage: ["doctor"]
+  },
+  create: {
+    description: "Creates an unowned Story in the Ready state; use start to claim it.",
+    usage: [
+      "create --title TITLE --description TEXT [options]",
+      "create --title TITLE --description-file PATH [options]"
+    ],
+    options: [
+      ["--title TITLE", "Story title (may instead be the first positional argument)"],
+      ["--description TEXT", "Story description"],
+      ["--description-file PATH", "Read the description from PATH, or - for stdin"],
+      ["--type TYPE", "bug, chore, or feature (default: chore)"],
+      ["--estimate N", "Set a positive integer estimate"],
+      ["--blocked-by ID", "Existing Story blocks this Story (repeatable)"],
+      ["--blocks ID", "This Story blocks an existing Story (repeatable)"],
+      ["--related-to ID", "Add a non-blocking relation (repeatable)"]
+    ]
+  },
+  list: {
+    description: "Lists every Story in the selected Epic.",
+    usage: ["list [--epic ID]"]
+  },
+  ready: {
+    description: "Lists unblocked Ready-state Stories that have no owners.",
+    usage: ["ready [--include-assigned]"],
+    options: [
+      ["--include-assigned", "Include Ready-state Stories that already have owners"]
+    ]
+  },
+  blocked: {
+    description: "Lists blocked Stories and inlines their blocker Stories.",
+    usage: ["blocked"]
+  },
+  show: {
+    description: "Shows one Story, its description, and its latest comments.",
+    usage: ["show STORY [--all-comments]"],
+    options: [
+      ["--all-comments", "Return all comments instead of only the latest 10"]
+    ]
+  },
+  edit: {
+    description: "Updates fields on an existing Story.",
+    usage: ["edit STORY <field options>"],
+    options: [
+      ["--title TITLE", "Rename the Story"],
+      ["--description TEXT", "Replace the description"],
+      ["--description-file PATH", "Read the description from PATH, or - for stdin"],
+      ["--type TYPE", "Set bug, chore, or feature"],
+      ["--estimate N", "Set a positive integer estimate"],
+      ["--clear-estimate", "Clear the estimate"],
+      ["--move-to-epic ID", "Move the Story to another Epic"],
+      ["--set-team [UUID]", "Set the Team, defaulting to the configured Team"],
+      ["--clear-team", "Remove the Team"],
+      ["--state ID", "Set a raw workflow state ID (bypasses lifecycle guards)"]
+    ]
+  },
+  start: {
+    description: "Claims an unowned, unblocked Ready Story and moves it to Started.",
+    usage: ["start STORY"]
+  },
+  complete: {
+    description: "Records completion evidence and moves an owned Story to Done.",
+    usage: ["complete STORY --summary TEXT [options]"],
+    options: [
+      ["--summary TEXT", "Required completion summary"],
+      ["--verification TEXT", "Verification performed"],
+      ["--evidence TEXT", "Evidence or artifact references"],
+      ["--changed TEXT", "What changed"],
+      ["--remaining TEXT", "Known remaining work"],
+      ["--force", "Bypass ownership and Started-state guards"]
+    ]
+  },
+  cancel: {
+    description: "Records a cancellation reason and moves a Story to Cancelled.",
+    usage: ["cancel STORY --reason TEXT [--force]"],
+    options: [
+      ["--reason TEXT", "Required cancellation reason"],
+      ["--force", "Bypass the ownership guard"]
+    ]
+  },
+  release: {
+    description: "Records a reason, clears owners, and returns a Story to Ready.",
+    usage: ["release STORY --reason TEXT [--force]"],
+    options: [
+      ["--reason TEXT", "Required release reason"],
+      ["--force", "Release a Story owned by another member"]
+    ]
+  },
+  handoff: {
+    description: "Records handoff context, optionally releasing the Story to Ready.",
+    usage: ["handoff STORY --summary TEXT [--release] [options]"],
+    options: [
+      ["--summary TEXT", "Required handoff summary"],
+      ["--changed TEXT", "What changed"],
+      ["--verification TEXT", "Verification performed"],
+      ["--remaining TEXT", "Known remaining work"],
+      ["--evidence TEXT", "Evidence or artifact references"],
+      ["--release", "Clear owners and return the Story to Ready"],
+      ["--force", "Bypass the ownership guard"]
+    ]
+  },
+  dep: {
+    description: "Adds or removes a Story dependency or related-Story link.",
+    usage: [
+      "dep add STORY --blocked-by|--blocks|--related-to OTHER",
+      "dep remove STORY --blocked-by|--blocks|--related-to OTHER"
+    ],
+    options: [
+      ["--blocked-by ID", "The other Story blocks STORY"],
+      ["--blocks ID", "STORY blocks the other Story"],
+      ["--related-to ID", "Add or remove a non-blocking relation"],
+      ["--allow-cross-epic", "Allow a relationship between different Epics"]
+    ]
+  },
+  "dep add": {
+    description: "Adds one dependency or related-Story link.",
+    usage: ["dep add STORY --blocked-by|--blocks|--related-to OTHER"],
+    options: [
+      ["--blocked-by ID", "The other Story blocks STORY"],
+      ["--blocks ID", "STORY blocks the other Story"],
+      ["--related-to ID", "Add a non-blocking relation"],
+      ["--allow-cross-epic", "Allow a relationship between different Epics"]
+    ]
+  },
+  "dep remove": {
+    description: "Removes one matching dependency or related-Story link.",
+    usage: ["dep remove STORY --blocked-by|--blocks|--related-to OTHER"],
+    options: [
+      ["--blocked-by ID", "The other Story blocks STORY"],
+      ["--blocks ID", "STORY blocks the other Story"],
+      ["--related-to ID", "Remove a non-blocking relation"],
+      ["--allow-cross-epic", "Allow a relationship between different Epics"]
+    ]
+  },
+  claims: {
+    description: "Lists in-flight Story claims and their idle or stale status.",
+    usage: ["claims [--mine|--held-by ID] [--stale] [--stale-minutes N]"],
+    options: [
+      ["--mine", "Only claims held by the configured agent identity"],
+      ["--held-by ID", "Only claims held by the specified agent identity"],
+      ["--stale", "Only claims at or beyond the stale threshold"],
+      ["--stale-minutes N", "Set the stale threshold in minutes (default: 60)"]
+    ]
+  },
+  context: {
+    description: "Prints a compact whole-Epic graph summary for agent context.",
+    usage: ["context"]
+  }
+};
+var COMMAND_USAGE = [
+  "init --epic ID [--team UUID] [--workflow ID] [state options]",
+  "config",
+  "doctor",
+  "create --title TITLE --description TEXT [relations]",
+  "list [--epic ID]",
+  "ready [--include-assigned]",
+  "blocked",
+  "show STORY [--all-comments]",
+  "edit STORY [field options]",
+  "start STORY",
+  "complete STORY --summary TEXT [--verification TEXT]",
+  "cancel STORY --reason TEXT",
+  "release STORY --reason TEXT",
+  "handoff STORY --summary TEXT [--release]",
+  "dep add|remove STORY --blocked-by|--blocks|--related-to OTHER",
+  "claims [--mine|--held-by ID] [--stale] [--stale-minutes N]",
+  "context"
+];
+function formatOptions(options) {
+  const width = Math.max(...options.map(([option2]) => option2.length));
+  return options.map(([option2, description]) => `  ${option2.padEnd(width)}  ${description}`).join("\n");
+}
+function globalHelp(version2) {
+  return [
+    `shortcut-agent ${version2}`,
+    "",
+    "Agent-first Shortcut work coordination.",
+    "",
+    "Usage:",
+    ...COMMAND_USAGE.map((usage) => `  shortcut-agent ${usage}`),
+    "",
+    "Global options:",
+    formatOptions(GLOBAL_OPTIONS),
+    "",
+    "Run `shortcut-agent COMMAND --help` for command-specific help.",
+    "See README.md for the complete behavioral contract and configuration reference."
+  ].join("\n");
+}
+function commandHelp(command, subcommand) {
+  const key = command === "dep" && subcommand ? `${command} ${subcommand}` : command;
+  const definition = COMMANDS[key];
+  if (!definition) return void 0;
+  const sections = [
+    `shortcut-agent ${key}`,
+    "",
+    definition.description,
+    "",
+    "Usage:",
+    ...definition.usage.map((usage) => `  shortcut-agent ${usage}`)
+  ];
+  if (definition.options?.length) {
+    sections.push("", "Options:", formatOptions(definition.options));
+  }
+  sections.push(
+    "",
+    "Global options:",
+    formatOptions(GLOBAL_OPTIONS),
+    "",
+    "See README.md for the complete behavioral contract and configuration reference."
+  );
+  return sections.join("\n");
+}
+
+// ../../src/config.js
+import {
+  access,
+  chmod,
+  link,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile
+} from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual, promisify } from "node:util";
+import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
+var CONFIG_FILENAME = ".shortcut-agent.json";
+var LOCAL_CONFIG_FILENAME = ".shortcut-agent.local.json";
+var execFileAsync = promisify(execFile);
+async function readConfigResult(filename, { mayNotExist = false } = {}) {
+  if (!filename) return { value: {}, exists: false };
+  let content;
+  try {
+    content = await readFile(filename, "utf8");
+  } catch (error51) {
+    if (mayNotExist && error51.code === "ENOENT") {
+      return { value: {}, exists: false };
+    }
+    throw configError(`Could not read config: ${filename}`, {
+      reason: error51.message
+    });
+  }
+  try {
+    const parsed = JSON.parse(content);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      throw new Error("configuration must be a JSON object");
+    }
+    return { value: parsed, exists: true };
+  } catch (error51) {
+    throw configError(`Invalid JSON config: ${filename}`, {
+      reason: error51.message
+    });
+  }
+}
+async function readConfig(filename, options) {
+  return (await readConfigResult(filename, options)).value;
+}
+function requireToken(config2) {
+  if (!config2.token) {
+    throw configError("SHORTCUT_API_TOKEN is required");
+  }
+  return config2.token;
+}
+function requireEpic(config2) {
+  if (!config2.epicId) {
+    throw configError("An Epic is required; pass --epic ID or run init");
+  }
+  return config2.epicId;
+}
+function requireAgent(config2) {
+  if (!config2.agentId || config2.agentId === true) {
+    throw configError(
+      "Agent identity is required; pass --agent, set SHORTCUT_AGENT_ID, or use an ignored local config"
+    );
+  }
+  return String(config2.agentId);
+}
+function requireState(config2, name) {
+  const value = config2.states[name];
+  if (!value) {
+    throw configError(
+      `The ${name} workflow state is not configured; run init or pass --${name}-state`
+    );
+  }
+  return value;
+}
+async function acquireWriteLock(target) {
+  const lockFilename = `${target}.lock`;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    try {
+      const handle = await open(lockFilename, "wx", 384);
+      try {
+        await handle.writeFile(`${process.pid}
+`);
+      } catch (error51) {
+        await handle.close().catch(() => {
+        });
+        await rm(lockFilename, { force: true }).catch(() => {
+        });
+        throw error51;
+      }
+      return async () => {
+        await handle.close().catch(() => {
+        });
+        await rm(lockFilename, { force: true }).catch(() => {
+        });
+      };
+    } catch (error51) {
+      if (error51.code !== "EEXIST") throw error51;
+      try {
+        const lockStat = await stat(lockFilename);
+        if (Date.now() - lockStat.mtimeMs > 3e4) {
+          const staleFilename = `${lockFilename}.${randomUUID()}.stale`;
+          try {
+            await rename(lockFilename, staleFilename);
+            await rm(staleFilename, { force: true });
+          } catch (renameError) {
+            if (renameError.code !== "ENOENT") throw renameError;
+          }
+          continue;
+        }
+      } catch (statError) {
+        if (statError.code === "ENOENT") continue;
+        throw statError;
+      }
+      await delay(25);
+    }
+  }
+  throw configError(`Timed out waiting to write config: ${target}`, {
+    config_file: target
+  });
+}
+async function writeConfig(filename, config2, { overwrite = true, expected } = {}) {
+  const requestedTarget = path.resolve(
+    filename ?? path.join(process.cwd(), CONFIG_FILENAME)
+  );
+  const releaseLock = await acquireWriteLock(requestedTarget);
+  let temporary;
+  try {
+    let target = requestedTarget;
+    if (overwrite) {
+      try {
+        target = await realpath(requestedTarget);
+      } catch (error51) {
+        if (error51.code !== "ENOENT") throw error51;
+      }
+    }
+    let mode = 420;
+    if (overwrite) {
+      try {
+        mode = (await stat(target)).mode & 4095;
+      } catch (error51) {
+        if (error51.code !== "ENOENT") throw error51;
+      }
+    }
+    temporary = path.join(
+      path.dirname(target),
+      `.${path.basename(target)}.${process.pid}.${randomUUID()}.tmp`
+    );
+    await writeFile(temporary, `${JSON.stringify(config2, null, 2)}
+`, {
+      encoding: "utf8",
+      mode,
+      flag: "wx"
+    });
+    await chmod(temporary, mode);
+    if (overwrite) {
+      if (expected !== void 0) {
+        const current = await readConfig(requestedTarget);
+        if (!isDeepStrictEqual(current, expected)) {
+          throw configError(`Config changed while init was running: ${requestedTarget}`, {
+            config_file: requestedTarget
+          });
+        }
+      }
+      await rename(temporary, target);
+    } else {
+      try {
+        await link(temporary, requestedTarget);
+      } catch (error51) {
+        if (error51.code === "EEXIST") {
+          throw configError(
+            `Config appeared while init was running: ${requestedTarget}`,
+            { config_file: requestedTarget }
+          );
+        }
+        throw error51;
+      }
+      await rm(temporary);
+    }
+    temporary = void 0;
+    return requestedTarget;
+  } finally {
+    if (temporary) await rm(temporary, { force: true }).catch(() => {
+    });
+    await releaseLock();
+  }
+}
+async function isGitIgnored(filename) {
+  try {
+    await execFileAsync(
+      "git",
+      ["-C", path.dirname(filename), "check-ignore", "--quiet", "--", filename],
+      { windowsHide: true }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ../../src/commands.js
+import { readFile as readFile2 } from "node:fs/promises";
+import path2 from "node:path";
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
+
+// ../../src/comments.js
+import { randomUUID as randomUUID2 } from "node:crypto";
+var EVENT_FORMAT_VERSION = 1;
+function lines(label, value) {
+  if (value === void 0 || value === null || value === "") return [];
+  const rendered = Array.isArray(value) ? value.join(", ") : String(value);
+  return [`- ${label}: ${rendered}`];
+}
+function createAgentEvent({
+  event,
+  agentId,
+  runId: runId2,
+  summary,
+  reason,
+  changed,
+  verification,
+  remaining,
+  evidence,
+  eventId = randomUUID2(),
+  timestamp = (/* @__PURE__ */ new Date()).toISOString(),
+  extra = {}
+}) {
+  const metadata = {
+    version: EVENT_FORMAT_VERSION,
+    event,
+    event_id: eventId,
+    agent_id: agentId,
+    run_id: runId2,
+    timestamp,
+    ...extra
+  };
+  const heading = event === "claim" ? "Agent claim" : event === "handoff" ? "Agent handoff" : event === "complete" ? "Agent completion" : event === "cancel" ? "Agent cancellation" : event === "release" ? "Agent release" : "Agent note";
+  const body = [
+    `## ${heading}`,
+    "",
+    ...lines("Agent", `\`${agentId}\``),
+    ...lines("Run", `\`${runId2}\``),
+    ...lines("Summary", summary),
+    ...lines("Reason", reason),
+    ...lines("Changed", changed),
+    ...lines("Verification", verification),
+    ...lines("Remaining", remaining),
+    ...lines("Evidence", evidence),
+    "",
+    "```shortcut-agent",
+    JSON.stringify(metadata),
+    "```"
+  ].join("\n");
+  return {
+    eventId,
+    timestamp,
+    metadata,
+    comment: {
+      external_id: `shortcut-agent:${event}:${eventId}`.slice(0, 128),
+      text: body
+    }
+  };
+}
+function parseAgentEvent(text2) {
+  if (typeof text2 !== "string") return void 0;
+  const match = text2.match(/```shortcut-agent\s*\n([^\n]+)\n```/);
+  if (!match) return void 0;
+  try {
+    const parsed = JSON.parse(match[1]);
+    return parsed?.version === EVENT_FORMAT_VERSION ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+
 // ../../src/domain.js
 function nestedEntities(value) {
   if (Array.isArray(value)) return value;
@@ -14785,12 +15466,12 @@ function owners(story) {
 function storyLinks(story) {
   return nestedEntities(story.story_links);
 }
-function linkEndpoints(link) {
+function linkEndpoints(link2) {
   return {
-    id: Number(link.id),
-    subjectId: Number(link.subject?.id ?? link.subject_story_id ?? link.subject_id),
-    objectId: Number(link.object?.id ?? link.object_story_id ?? link.object_id),
-    verb: link.verb
+    id: Number(link2.id),
+    subjectId: Number(link2.subject?.id ?? link2.subject_story_id ?? link2.subject_id),
+    objectId: Number(link2.object?.id ?? link2.object_story_id ?? link2.object_id),
+    verb: link2.verb
   };
 }
 function isReady(story, statesById, { includeAssigned = false } = {}) {
@@ -14819,10 +15500,10 @@ function summarizeStory(story, statesById, { includeDescription = false } = {}) 
       name: owner.name
     })),
     position: story.position,
-    blocked_by: links.filter((link) => link.verb === "blocks" && link.objectId === Number(story.id)).map((link) => link.subjectId),
-    blocks: links.filter((link) => link.verb === "blocks" && link.subjectId === Number(story.id)).map((link) => link.objectId),
-    related_to: links.filter((link) => link.verb === "relates to").map(
-      (link) => link.subjectId === Number(story.id) ? link.objectId : link.subjectId
+    blocked_by: links.filter((link2) => link2.verb === "blocks" && link2.objectId === Number(story.id)).map((link2) => link2.subjectId),
+    blocks: links.filter((link2) => link2.verb === "blocks" && link2.subjectId === Number(story.id)).map((link2) => link2.objectId),
+    related_to: links.filter((link2) => link2.verb === "relates to").map(
+      (link2) => link2.subjectId === Number(story.id) ? link2.objectId : link2.subjectId
     ),
     updated_at: story.updated_at
   };
@@ -14848,14 +15529,1245 @@ function classifyStories(stories, statesById, options = {}) {
   }
   return result;
 }
+function assertSameEpic(story, epicId) {
+  const actual = storyEpicId(story);
+  if (actual !== Number(epicId)) {
+    throw conflictError(
+      "story_outside_epic",
+      `Story ${story.id} does not belong to Epic ${epicId}`,
+      { story_id: Number(story.id), expected_epic_id: Number(epicId), actual_epic_id: actual }
+    );
+  }
+}
+function assertNoCycle(stories, subjectId, objectId) {
+  if (Number(subjectId) === Number(objectId)) {
+    throw conflictError("dependency_cycle", "A Story cannot block itself");
+  }
+  const adjacency = /* @__PURE__ */ new Map();
+  for (const story of stories) {
+    for (const link2 of storyLinks(story).map(linkEndpoints)) {
+      if (link2.verb !== "blocks") continue;
+      if (!adjacency.has(link2.subjectId)) adjacency.set(link2.subjectId, /* @__PURE__ */ new Set());
+      adjacency.get(link2.subjectId).add(link2.objectId);
+    }
+  }
+  if (!adjacency.has(Number(subjectId))) adjacency.set(Number(subjectId), /* @__PURE__ */ new Set());
+  adjacency.get(Number(subjectId)).add(Number(objectId));
+  const target = Number(subjectId);
+  const stack = [Number(objectId)];
+  const visited = /* @__PURE__ */ new Set();
+  while (stack.length) {
+    const current = stack.pop();
+    if (current === target) {
+      throw conflictError(
+        "dependency_cycle",
+        `Adding ${subjectId} blocks ${objectId} would create a dependency cycle`,
+        { subject_story_id: Number(subjectId), object_story_id: Number(objectId) }
+      );
+    }
+    if (visited.has(current)) continue;
+    visited.add(current);
+    stack.push(...adjacency.get(current) ?? []);
+  }
+}
 
-// server.ts
-var CONFIG_FILENAME = ".shortcut-agent.json";
-var configSchema = external_exports.object({
+// ../../src/commands.js
+function runId(config2) {
+  return config2.runId ?? randomUUID3();
+}
+async function readStream(stream) {
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
+async function textOption(options, name, { required: required2 = false, stdin = process.stdin } = {}) {
+  const inline = option(options, name);
+  const filename = option(options, `${name}-file`);
+  if (inline !== void 0 && filename !== void 0) {
+    throw argumentError(`Use either --${name} or --${name}-file, not both`);
+  }
+  let value;
+  if (inline !== void 0 && inline !== true) value = String(inline);
+  else if (filename === "-") value = await readStream(stdin);
+  else if (filename !== void 0 && filename !== true) {
+    try {
+      value = await readFile2(path2.resolve(String(filename)), "utf8");
+    } catch (error51) {
+      throw argumentError(`Could not read --${name}-file`, {
+        filename,
+        reason: error51.message
+      });
+    }
+  }
+  if (required2 && (!value || !value.trim())) {
+    throw argumentError(
+      `--${name} or --${name}-file is required and must not be empty`
+    );
+  }
+  return value;
+}
+async function statesFor(client) {
+  const states = await client.listWorkflowStates();
+  return { states, index: stateIndex(states) };
+}
+async function epicStories(client, config2) {
+  const epicId = requireEpic(config2);
+  const [stories, stateData] = await Promise.all([
+    client.listEpicStories(epicId),
+    statesFor(client)
+  ]);
+  return { epicId, stories, ...stateData };
+}
+function memberId(whoami) {
+  const id = whoami?.member?.id;
+  if (!id) throw configError("Shortcut whoami did not return a member ID");
+  return id;
+}
+function assertOwnedBy(story, id, { allowUnowned = false, force = false } = {}) {
+  if (force) return;
+  const currentOwners = owners(story);
+  if (allowUnowned && currentOwners.length === 0) return;
+  if (!currentOwners.some((owner) => owner.id === id)) {
+    throw conflictError(
+      "ownership_conflict",
+      `Story ${story.id} is not owned by the authenticated Shortcut member`,
+      { owners: currentOwners.map((owner) => ({ id: owner.id, name: owner.name })) }
+    );
+  }
+}
+function eventInput(parsed, config2, event, requiredField) {
+  const value = requiredField ? option(parsed.options, requiredField) : void 0;
+  if (requiredField && (value === void 0 || value === true || !String(value).trim())) {
+    throw argumentError(`--${requiredField} is required`);
+  }
+  return createAgentEvent({
+    event,
+    agentId: requireAgent(config2),
+    runId: runId(config2),
+    summary: option(parsed.options, "summary"),
+    reason: option(parsed.options, "reason"),
+    changed: option(parsed.options, "changed"),
+    verification: option(parsed.options, "verification"),
+    remaining: option(parsed.options, "remaining"),
+    evidence: option(parsed.options, "evidence")
+  });
+}
+function configuredStateTypes(config2, index) {
+  const result = {};
+  for (const [name, id] of Object.entries(config2.states)) {
+    if (id) result[name] = index.get(Number(id));
+  }
+  return result;
+}
+function workflowName(states, workflowId) {
+  if (!workflowId) return null;
+  const match = states.find((state) => Number(state.workflow?.id) === Number(workflowId));
+  return match?.workflow?.name ?? null;
+}
+function strictTextOption(options, name) {
+  const value = option(options, name);
+  if (value === void 0) return void 0;
+  if (typeof value === "boolean" || !String(value).trim()) {
+    throw argumentError(`--${name} requires a value`);
+  }
+  return String(value);
+}
+async function resolveWorkflow({ client, epic, whoami, teamOption, workflowOption }) {
+  const warnings = [];
+  const memberWorkflowId = Number(whoami?.default_workflow?.id) || void 0;
+  const epicTeams = nestedEntities(epic.teams);
+  if (epicTeams.length > 1 && !teamOption) {
+    warnings.push(
+      `Epic has ${epicTeams.length} teams; using ${epicTeams[0]?.name ?? epicTeams[0]?.id}. Pass --team to choose another.`
+    );
+  }
+  const teamId = teamOption ?? epicTeams[0]?.id;
+  const source = teamOption ? "team-option" : "epic-team";
+  const selectedTeam = teamOption ? epicTeams.find((item) => String(item.id) === String(teamOption)) ?? {
+    id: teamOption
+  } : epicTeams[0];
+  if (workflowOption !== void 0) {
+    let team = selectedTeam;
+    if (teamOption) {
+      try {
+        team = await client.getTeam(teamOption);
+      } catch (error51) {
+        throw configError(`Could not read team ${teamOption}`, {
+          team_id: String(teamOption),
+          reason: error51.message
+        });
+      }
+    }
+    return {
+      workflowId: integer2(workflowOption, "--workflow", { required: true }),
+      workflowSource: "workflow-option",
+      team,
+      warnings
+    };
+  }
+  if (teamId) {
+    try {
+      const team = await client.getTeam(teamId);
+      const teamWorkflowId = Number(team?.default_workflow?.id) || void 0;
+      if (teamWorkflowId) {
+        return { workflowId: teamWorkflowId, workflowSource: source, team, warnings };
+      }
+      warnings.push(
+        `Team ${team?.name ?? teamId} has no default workflow; falling back to the member default.`
+      );
+      return { workflowId: memberWorkflowId, workflowSource: "member", team, warnings };
+    } catch (error51) {
+      if (teamOption) {
+        throw configError(`Could not read team ${teamId}`, {
+          team_id: String(teamId),
+          reason: error51.message
+        });
+      }
+      warnings.push(
+        `Could not read team ${teamId} (${error51.message}); falling back to the member default workflow without adopting the team.`
+      );
+      return {
+        workflowId: memberWorkflowId,
+        workflowSource: "member",
+        team: void 0,
+        warnings
+      };
+    }
+  }
+  return {
+    workflowId: memberWorkflowId,
+    workflowSource: "member",
+    team: selectedTeam,
+    warnings
+  };
+}
+async function initCommand(parsed, context) {
+  const { config: config2, makeClient, env = process.env } = context;
+  const workspaceOption = strictTextOption(parsed.options, "workspace");
+  const teamCommandOption = strictTextOption(parsed.options, "team");
+  const requestedAgent = option(parsed.options, "agent");
+  if (requestedAgent !== void 0 && (typeof requestedAgent === "boolean" || !String(requestedAgent).trim())) {
+    throw argumentError("--agent must not be empty");
+  }
+  requireToken(config2);
+  const discoveryClient = makeClient({ workspace: void 0 });
+  const whoami = await discoveryClient.whoami();
+  const workspace = workspaceOption ?? env.SHORTCUT_WORKSPACE ?? whoami?.workspace?.slug;
+  if (!workspace) throw configError("Shortcut whoami did not return a workspace slug");
+  const client = makeClient({ workspace });
+  const [states, epic] = await Promise.all([
+    client.listWorkflowStates(),
+    client.getEpic(requireEpic(config2))
+  ]);
+  const teamOption = teamCommandOption ?? env.SHORTCUT_TEAM_ID;
+  const { workflowId, workflowSource, team, warnings } = await resolveWorkflow({
+    client,
+    epic,
+    whoami,
+    teamOption,
+    workflowOption: option(parsed.options, "workflow")
+  });
+  const workflowStates = states.filter(
+    (state) => !workflowId || Number(state.workflow?.id) === workflowId
+  );
+  if (workflowId && workflowStates.length === 0) {
+    throw configError(`Workflow ${workflowId} has no discoverable states`, {
+      workflow_id: workflowId
+    });
+  }
+  const candidates = workflowId ? workflowStates : states;
+  const choose = (type, namePattern) => candidates.find(
+    (state) => state.type === type && (!namePattern || namePattern.test(state.name ?? ""))
+  ) ?? candidates.find((state) => state.type === type);
+  const stateOverride = (name) => {
+    const value = option(parsed.options, `${name}-state`);
+    return value === void 0 ? void 0 : integer2(value, `${name} state ID`);
+  };
+  const ready = stateOverride("ready") ?? choose("unstarted")?.id ?? choose("backlog")?.id;
+  const started = stateOverride("started") ?? choose("started")?.id;
+  const done = stateOverride("done") ?? choose("done", /done|complete|finish/i)?.id;
+  const cancelled = stateOverride("cancelled") ?? choose("done", /cancel|won't|wont|abandon/i)?.id ?? done;
+  if (!ready || !started || !done) {
+    throw configError("Could not discover required ready, started, and done states", {
+      states: candidates.map(({ id, name, type }) => ({ id, name, type }))
+    });
+  }
+  const teamId = teamOption ?? (team ? String(team.id) : void 0);
+  const document = {
+    workspace,
+    ...flag(parsed.options, "default-epic", true) ? { epic_id: Number(epic.id) } : {},
+    ...teamId ? { team_id: teamId } : {},
+    states: {
+      ready: Number(ready),
+      started: Number(started),
+      done: Number(done),
+      cancelled: Number(cancelled)
+    }
+  };
+  const force = flag(parsed.options, "force");
+  const merge2 = flag(parsed.options, "merge");
+  if (force && merge2) {
+    throw argumentError("Use either --force or --merge, not both");
+  }
+  const {
+    agent_id: legacyAgent,
+    workspace: _existingWorkspace,
+    epic_id: _existingEpic,
+    team_id: _existingTeam,
+    states: existingStates,
+    ...extraConfig
+  } = config2.raw;
+  const mergedDocument = {
+    ...extraConfig,
+    ...document,
+    states: { ...existingStates, ...document.states }
+  };
+  let documentToWrite = document;
+  if (config2.exists && !isDeepStrictEqual2(config2.raw, document)) {
+    if (merge2) documentToWrite = mergedDocument;
+    else if (!force) {
+      const summarize = (value) => ({
+        workspace: value.workspace,
+        epic_id: value.epic_id,
+        team_id: value.team_id,
+        states: value.states
+      });
+      throw configError(
+        "Config already exists and differs; rerun with --merge to preserve extra keys or --force to replace it",
+        {
+          config_file: config2.filename,
+          existing: summarize(config2.raw),
+          proposed: summarize(document)
+        }
+      );
+    }
+  } else if (merge2) {
+    documentToWrite = mergedDocument;
+  }
+  const unchanged = config2.exists && isDeepStrictEqual2(config2.raw, documentToWrite);
+  const written = unchanged ? config2.filename : await writeConfig(config2.filename, documentToWrite, {
+    overwrite: config2.exists,
+    ...config2.exists ? { expected: config2.raw } : {}
+  });
+  if (config2.source === "ancestor" && !unchanged) {
+    warnings.push(`Updated discovered ancestor config: ${written}`);
+  }
+  const agentToPersist = requestedAgent ?? (config2.localRaw.agent_id === void 0 ? legacyAgent : void 0);
+  let localWritten;
+  if (agentToPersist !== void 0) {
+    const localTarget = path2.join(path2.dirname(written), LOCAL_CONFIG_FILENAME);
+    const existingLocal = config2.localFilename && path2.resolve(config2.localFilename) === path2.resolve(localTarget) ? config2.localRaw : {};
+    localWritten = await writeConfig(
+      localTarget,
+      {
+        ...existingLocal,
+        agent_id: String(agentToPersist)
+      },
+      {
+        overwrite: Boolean(config2.localFilename),
+        ...config2.localFilename ? { expected: config2.localRaw } : {}
+      }
+    );
+    if (!await isGitIgnored(localWritten)) {
+      warnings.push(
+        `${LOCAL_CONFIG_FILENAME} is not ignored by Git; add it to .gitignore or .git/info/exclude`
+      );
+    }
+  }
+  return {
+    ok: true,
+    command: "init",
+    config_file: written,
+    config_source: config2.source,
+    unchanged,
+    workspace,
+    epic: { id: Number(epic.id), name: epic.name },
+    workflow: {
+      id: workflowId ?? null,
+      name: workflowName(states, workflowId),
+      source: workflowSource
+    },
+    team: team ? { id: String(team.id), name: team.name } : null,
+    warnings,
+    ...localWritten ? { local_config_file: localWritten, agent_id: String(agentToPersist) } : {},
+    states: document.states
+  };
+}
+async function configCommand(_parsed, { config: config2 }) {
+  return {
+    ok: true,
+    command: "config",
+    config_file: config2.filename,
+    local_config_file: config2.localFilename,
+    api_url: config2.apiUrl,
+    token_configured: Boolean(config2.token),
+    workspace: config2.workspace,
+    epic_id: config2.epicId,
+    team_id: config2.teamId,
+    agent_id: config2.agentId,
+    agent_id_source: config2.agentSource,
+    states: config2.states
+  };
+}
+async function doctorCommand(_parsed, { client, config: config2 }) {
+  const epicId = requireEpic(config2);
+  const [whoami, epic, stateData] = await Promise.all([
+    client.whoami(),
+    client.getEpic(epicId),
+    statesFor(client)
+  ]);
+  const configured = configuredStateTypes(config2, stateData.index);
+  const warnings = [];
+  const expected = {
+    ready: /* @__PURE__ */ new Set(["backlog", "unstarted"]),
+    started: /* @__PURE__ */ new Set(["started"]),
+    done: /* @__PURE__ */ new Set(["done"]),
+    cancelled: /* @__PURE__ */ new Set(["done"])
+  };
+  for (const name of ["ready", "started", "done", "cancelled"]) {
+    if (!config2.states[name]) warnings.push(`${name} state is not configured`);
+    else if (!configured[name]) warnings.push(`${name} state ${config2.states[name]} was not found`);
+    else if (!expected[name].has(configured[name].type)) {
+      warnings.push(
+        `${name} state ${configured[name].name} has unexpected type ${configured[name].type}`
+      );
+    }
+  }
+  return {
+    ok: warnings.length === 0,
+    command: "doctor",
+    workspace: whoami.workspace,
+    member: whoami.member,
+    epic: { id: Number(epic.id), name: epic.name },
+    agent_id: config2.agentId,
+    agent_id_source: config2.agentSource,
+    states: Object.fromEntries(
+      Object.entries(configured).map(([name, state]) => [
+        name,
+        state ? { id: Number(state.id), name: state.name, type: state.type } : null
+      ])
+    ),
+    warnings
+  };
+}
+async function createCommand(parsed, { client, config: config2, stdin }) {
+  const epicId = requireEpic(config2);
+  const title = option(parsed.options, "title") ?? parsed.args[0];
+  if (!title || title === true) throw argumentError("--title is required");
+  const description = await textOption(parsed.options, "description", {
+    required: true,
+    stdin
+  });
+  const storyType = option(parsed.options, "type", "chore");
+  if (!["bug", "chore", "feature"].includes(storyType)) {
+    throw argumentError("--type must be bug, chore, or feature");
+  }
+  const links = [
+    ...storyIds(parsed.options, "blocked-by").map((id) => ({
+      subject_story_id: id,
+      verb: "blocks"
+    })),
+    ...storyIds(parsed.options, "blocks").map((id) => ({
+      object_story_id: id,
+      verb: "blocks"
+    })),
+    ...storyIds(parsed.options, "related-to").map((id) => ({
+      object_story_id: id,
+      verb: "relates to"
+    }))
+  ];
+  const body = {
+    name: String(title),
+    description,
+    epic_id: epicId,
+    workflow_state_id: requireState(config2, "ready"),
+    story_type: storyType,
+    ...config2.teamId ? { team_id: config2.teamId } : {},
+    ...links.length ? { story_links: links } : {}
+  };
+  const estimate = option(parsed.options, "estimate");
+  if (estimate !== void 0) body.estimate = integer2(estimate, "--estimate");
+  const story = await client.createStory(body);
+  const { index } = await statesFor(client);
+  return {
+    ok: true,
+    command: "create",
+    story: summarizeStory(story, index, { includeDescription: true })
+  };
+}
+async function listCommand(parsed, { client, config: config2 }) {
+  const { epicId, stories, index } = await epicStories(client, config2);
+  return {
+    ok: true,
+    command: "list",
+    epic_id: epicId,
+    stories: sortStories(stories).map((story) => summarizeStory(story, index))
+  };
+}
+async function readyCommand(parsed, { client, config: config2 }) {
+  const { epicId, stories, index } = await epicStories(client, config2);
+  const includeAssigned = flag(parsed.options, "include-assigned");
+  return {
+    ok: true,
+    command: "ready",
+    epic_id: epicId,
+    stories: sortStories(
+      stories.filter((story) => isReady(story, index, { includeAssigned }))
+    ).map((story) => summarizeStory(story, index))
+  };
+}
+async function blockedCommand(_parsed, { client, config: config2 }) {
+  const { epicId, stories, index } = await epicStories(client, config2);
+  const blocked = sortStories(stories.filter((story) => story.blocked === true));
+  const blockerIds = new Set(
+    blocked.flatMap((story) => summarizeStory(story, index).blocked_by)
+  );
+  const blockerStories = /* @__PURE__ */ new Map();
+  await Promise.all(
+    [...blockerIds].map(async (id) => blockerStories.set(id, await client.getStory(id)))
+  );
+  return {
+    ok: true,
+    command: "blocked",
+    epic_id: epicId,
+    stories: blocked.map((story) => {
+      const summary = summarizeStory(story, index);
+      return {
+        ...summary,
+        blockers: summary.blocked_by.map((id) => {
+          const blocker = blockerStories.get(id);
+          return blocker ? summarizeStory(blocker, index) : { id, unavailable: true };
+        })
+      };
+    })
+  };
+}
+async function showCommand(parsed, { client }) {
+  const storyId = integer2(requirePositional(parsed, 0, "Story ID"), "Story ID", {
+    required: true
+  });
+  const [story, stateData, comments] = await Promise.all([
+    client.getStory(storyId),
+    statesFor(client),
+    client.listStoryComments(storyId)
+  ]);
+  const allComments = flag(parsed.options, "all-comments");
+  const selected = allComments ? comments : comments.slice(-10);
+  return {
+    ok: true,
+    command: "show",
+    story: summarizeStory(story, stateData.index, { includeDescription: true }),
+    comments: selected.map((comment) => ({
+      id: Number(comment.id),
+      author: comment.author,
+      text: comment.text,
+      created_at: comment.created_at,
+      updated_at: comment.updated_at,
+      external_id: comment.external_id,
+      agent_event: parseAgentEvent(comment.text)
+    })),
+    comments_returned: selected.length,
+    comments_total: comments.length
+  };
+}
+async function editCommand(parsed, { client, config: config2, stdin }) {
+  const storyId = integer2(requirePositional(parsed, 0, "Story ID"), "Story ID", {
+    required: true
+  });
+  const body = {};
+  const title = option(parsed.options, "title");
+  if (title !== void 0 && title !== true) body.name = String(title);
+  const description = await textOption(parsed.options, "description", { stdin });
+  if (description !== void 0) body.description = description;
+  const type = option(parsed.options, "type");
+  if (type !== void 0) {
+    if (!["bug", "chore", "feature"].includes(type)) {
+      throw argumentError("--type must be bug, chore, or feature");
+    }
+    body.story_type = type;
+  }
+  if (option(parsed.options, "estimate") !== void 0) {
+    body.estimate = integer2(option(parsed.options, "estimate"), "--estimate");
+  }
+  if (flag(parsed.options, "clear-estimate")) body.estimate = null;
+  const moveToEpic = option(parsed.options, "move-to-epic");
+  if (moveToEpic !== void 0) {
+    body.epic_id = integer2(moveToEpic, "--move-to-epic", { required: true });
+  }
+  if (option(parsed.options, "set-team") !== void 0) {
+    const requested = text(parsed.options, "set-team") ?? config2.teamId;
+    if (!requested) {
+      throw argumentError("--set-team requires a Team UUID or a configured team");
+    }
+    body.team_id = requested;
+  }
+  if (flag(parsed.options, "clear-team")) body.team_id = null;
+  if (option(parsed.options, "state") !== void 0) {
+    body.workflow_state_id = integer2(option(parsed.options, "state"), "--state");
+  }
+  if (Object.keys(body).length === 0) {
+    throw argumentError("edit requires at least one field option");
+  }
+  const story = await client.updateStory(storyId, body);
+  const { index } = await statesFor(client);
+  return {
+    ok: true,
+    command: "edit",
+    story: summarizeStory(story, index, { includeDescription: true })
+  };
+}
+async function startCommand(parsed, { client, config: config2 }) {
+  const storyId = integer2(requirePositional(parsed, 0, "Story ID"), "Story ID", {
+    required: true
+  });
+  const epicId = requireEpic(config2);
+  const agentId = requireAgent(config2);
+  const [story, whoami, stateData] = await Promise.all([
+    client.getStory(storyId),
+    client.whoami(),
+    statesFor(client)
+  ]);
+  assertSameEpic(story, epicId);
+  const state = storyState(story, stateData.index);
+  if (story.blocked === true) {
+    throw conflictError("story_blocked", `Story ${storyId} is blocked`, {
+      blocked_by: summarizeStory(story, stateData.index).blocked_by
+    });
+  }
+  if (!["backlog", "unstarted"].includes(state.type)) {
+    throw conflictError(
+      "invalid_story_state",
+      `Story ${storyId} is in ${state.name ?? state.type}, not a ready state`
+    );
+  }
+  if (owners(story).length > 0) {
+    throw conflictError("claim_conflict", `Story ${storyId} already has an owner`, {
+      owners: owners(story)
+    });
+  }
+  const ownerId = memberId(whoami);
+  const startedState = requireState(config2, "started");
+  await client.updateStory(storyId, {
+    owner_ids: [ownerId],
+    workflow_state_id: startedState
+  });
+  const claim = createAgentEvent({
+    event: "claim",
+    agentId,
+    runId: runId(config2),
+    extra: { story_id: storyId, owner_id: ownerId }
+  });
+  const warnings = [];
+  let comment;
+  try {
+    comment = await client.createStoryComment(storyId, claim.comment);
+  } catch (error51) {
+    warnings.push(`Claim succeeded but claim comment failed: ${error51.message}`);
+  }
+  const verified = await client.getStory(storyId);
+  if (Number(verified.workflow_state?.id ?? verified.workflow_state_id) !== Number(startedState) || !owners(verified).some((owner) => owner.id === ownerId)) {
+    throw conflictError(
+      "claim_conflict",
+      `Story ${storyId} claim did not survive verification`,
+      { claim_id: claim.eventId }
+    );
+  }
+  return {
+    ok: true,
+    command: "start",
+    claim: claim.metadata,
+    claim_comment_id: comment?.id,
+    story: summarizeStory(verified, stateData.index),
+    warnings
+  };
+}
+async function lifecycleCommand(parsed, context, event) {
+  const { client, config: config2 } = context;
+  const storyId = integer2(requirePositional(parsed, 0, "Story ID"), "Story ID", {
+    required: true
+  });
+  const epicId = requireEpic(config2);
+  const [story, whoami, stateData] = await Promise.all([
+    client.getStory(storyId),
+    client.whoami(),
+    statesFor(client)
+  ]);
+  assertSameEpic(story, epicId);
+  const ownerId = memberId(whoami);
+  const force = flag(parsed.options, "force");
+  assertOwnedBy(story, ownerId, {
+    allowUnowned: event === "cancel",
+    force
+  });
+  if (event === "complete" && !force && storyState(story, stateData.index).type !== "started") {
+    throw conflictError(
+      "invalid_story_state",
+      `Story ${storyId} must be started before it can be completed`
+    );
+  }
+  const requiredField = event === "cancel" || event === "release" ? "reason" : "summary";
+  const agentEvent = eventInput(parsed, config2, event, requiredField);
+  const comment = await client.createStoryComment(storyId, agentEvent.comment);
+  let body;
+  if (event === "complete") {
+    body = { workflow_state_id: requireState(config2, "done") };
+  } else if (event === "cancel") {
+    body = {
+      workflow_state_id: config2.states.cancelled ?? requireState(config2, "done")
+    };
+  } else {
+    body = {
+      owner_ids: [],
+      workflow_state_id: requireState(config2, "ready")
+    };
+  }
+  const updated = await client.updateStory(storyId, body);
+  return {
+    ok: true,
+    command: event,
+    event: agentEvent.metadata,
+    comment_id: comment?.id,
+    story: summarizeStory(updated, stateData.index),
+    warnings: event === "cancel" && summarizeStory(story, stateData.index).blocks.length ? ["Cancellation uses a Done-type state and may unblock downstream Stories"] : []
+  };
+}
+async function handoffCommand(parsed, { client, config: config2 }) {
+  const storyId = integer2(requirePositional(parsed, 0, "Story ID"), "Story ID", {
+    required: true
+  });
+  const epicId = requireEpic(config2);
+  const [story, whoami, stateData] = await Promise.all([
+    client.getStory(storyId),
+    client.whoami(),
+    statesFor(client)
+  ]);
+  assertSameEpic(story, epicId);
+  assertOwnedBy(story, memberId(whoami), { force: flag(parsed.options, "force") });
+  const handoff = eventInput(parsed, config2, "handoff", "summary");
+  const comment = await client.createStoryComment(storyId, handoff.comment);
+  let updated = story;
+  if (flag(parsed.options, "release")) {
+    updated = await client.updateStory(storyId, {
+      owner_ids: [],
+      workflow_state_id: requireState(config2, "ready")
+    });
+  }
+  return {
+    ok: true,
+    command: "handoff",
+    event: handoff.metadata,
+    comment_id: comment?.id,
+    released: flag(parsed.options, "release"),
+    story: summarizeStory(updated, stateData.index)
+  };
+}
+function dependencySpec(parsed, storyId) {
+  const entries = [
+    ...storyIds(parsed.options, "blocked-by").map((target) => ({
+      subjectId: target,
+      objectId: storyId,
+      verb: "blocks",
+      relation: "blocked-by"
+    })),
+    ...storyIds(parsed.options, "blocks").map((target) => ({
+      subjectId: storyId,
+      objectId: target,
+      verb: "blocks",
+      relation: "blocks"
+    })),
+    ...storyIds(parsed.options, "related-to").map((target) => ({
+      subjectId: storyId,
+      objectId: target,
+      verb: "relates to",
+      relation: "related-to"
+    }))
+  ];
+  if (entries.length !== 1) {
+    throw argumentError(
+      "dep requires exactly one --blocked-by, --blocks, or --related-to Story ID"
+    );
+  }
+  return entries[0];
+}
+async function dependencyCommand(parsed, { client, config: config2 }) {
+  const action = requirePositional(parsed, 0, "dep action");
+  if (!["add", "remove"].includes(action)) {
+    throw argumentError("dep action must be add or remove");
+  }
+  const storyId = integer2(requirePositional(parsed, 1, "Story ID"), "Story ID", {
+    required: true
+  });
+  const spec = dependencySpec(parsed, storyId);
+  const [subject, object2] = await Promise.all([
+    client.getStory(spec.subjectId),
+    client.getStory(spec.objectId)
+  ]);
+  const subjectEpic = storyEpicId(subject);
+  const objectEpic = storyEpicId(object2);
+  const crossEpic = subjectEpic !== objectEpic;
+  if (crossEpic && !flag(parsed.options, "allow-cross-epic")) {
+    throw conflictError(
+      "cross_epic_dependency",
+      "Cross-Epic dependencies require --allow-cross-epic",
+      { subject_epic_id: subjectEpic, object_epic_id: objectEpic }
+    );
+  }
+  if (action === "add") {
+    const existingLinks = [
+      ...await client.storyLinks(subject),
+      ...await client.storyLinks(object2)
+    ].map(linkEndpoints).filter(
+      (link3) => link3.subjectId === spec.subjectId && link3.objectId === spec.objectId && link3.verb === spec.verb
+    );
+    if (existingLinks.length) {
+      return {
+        ok: true,
+        command: "dep add",
+        link: existingLinks[0],
+        unchanged: true,
+        warnings: crossEpic ? ["Cross-Epic graph cycle safety could not be proven"] : []
+      };
+    }
+    if (spec.verb === "blocks" && !crossEpic) {
+      const stories = await client.listEpicStories(subjectEpic);
+      await Promise.all(
+        stories.map(async (story) => {
+          const nested = story.story_links;
+          if (nested?.list_url && Number(nested.total_items) > (nested.entities?.length ?? 0)) {
+            story.story_links = { entities: await client.storyLinks(story) };
+          }
+        })
+      );
+      assertNoCycle(stories, spec.subjectId, spec.objectId);
+    }
+    const link2 = await client.createStoryLink({
+      subject_story_id: spec.subjectId,
+      object_story_id: spec.objectId,
+      verb: spec.verb
+    });
+    return {
+      ok: true,
+      command: "dep add",
+      link: linkEndpoints(link2),
+      warnings: crossEpic ? ["Cross-Epic graph cycle safety could not be proven"] : []
+    };
+  }
+  const links = await client.storyLinks(storyId === spec.subjectId ? subject : object2);
+  const matching = links.map((link2) => ({ raw: link2, ...linkEndpoints(link2) })).filter(
+    (link2) => link2.subjectId === spec.subjectId && link2.objectId === spec.objectId && link2.verb === spec.verb
+  );
+  if (matching.length === 0) {
+    throw conflictError("dependency_not_found", "Matching Story relationship was not found", spec);
+  }
+  await Promise.all(matching.map((link2) => client.deleteStoryLink(link2.id)));
+  return {
+    ok: true,
+    command: "dep remove",
+    removed_link_ids: matching.map((link2) => link2.id)
+  };
+}
+function nonNegativeInteger(value, label) {
+  const parsed = Number(value);
+  if (typeof value === "boolean" || !Number.isSafeInteger(parsed) || parsed < 0) {
+    throw argumentError(`${label} must be a non-negative integer`);
+  }
+  return parsed;
+}
+function latestEvent(events, predicate = () => true) {
+  let found;
+  for (const event of events) {
+    if (!predicate(event)) continue;
+    if (!found || String(event.timestamp) > String(found.timestamp)) found = event;
+  }
+  return found;
+}
+function claimSummary(story, index, comments, { now, staleMinutes }) {
+  const events = comments.map((comment) => parseAgentEvent(comment.text)).filter(Boolean);
+  const claim = latestEvent(events, (event) => event.event === "claim");
+  const last = latestEvent(events);
+  const activityAt = last?.timestamp ?? story.updated_at;
+  const parsed = activityAt ? Date.parse(activityAt) : Number.NaN;
+  const idleMinutes = Number.isFinite(parsed) ? Math.max(0, Math.round((now - parsed) / 6e4)) : void 0;
+  return {
+    story: summarizeStory(story, index),
+    agent_id: claim?.agent_id ?? null,
+    run_id: claim?.run_id ?? null,
+    claimed_at: claim?.timestamp ?? null,
+    last_event: last ? {
+      event: last.event,
+      timestamp: last.timestamp,
+      agent_id: last.agent_id,
+      run_id: last.run_id
+    } : null,
+    idle_minutes: idleMinutes ?? null,
+    stale: idleMinutes === void 0 ? false : idleMinutes >= staleMinutes,
+    unattributed: !claim
+  };
+}
+async function claimsCommand(parsed, { client, config: config2 }) {
+  const { epicId, stories, index } = await epicStories(client, config2);
+  const staleOption = option(parsed.options, "stale-minutes");
+  const staleMinutes = staleOption === void 0 ? 60 : nonNegativeInteger(staleOption, "--stale-minutes");
+  const heldBy = flag(parsed.options, "mine") ? requireAgent(config2) : text(parsed.options, "held-by");
+  const onlyStale = flag(parsed.options, "stale");
+  const inFlight = sortStories(stories).filter((story) => {
+    const state = storyState(story, index);
+    if (state.type === "done" || story.archived) return false;
+    return owners(story).length > 0 || state.type === "started";
+  });
+  const now = Date.now();
+  const claims = await Promise.all(
+    inFlight.map(
+      async (story) => claimSummary(story, index, await client.listStoryComments(story.id), {
+        now,
+        staleMinutes
+      })
+    )
+  );
+  return {
+    ok: true,
+    command: "claims",
+    epic_id: epicId,
+    stale_minutes: staleMinutes,
+    generated_at: new Date(now).toISOString(),
+    claims: claims.filter((claim) => heldBy ? claim.agent_id === heldBy : true).filter((claim) => onlyStale ? claim.stale : true)
+  };
+}
+async function contextCommand(_parsed, { client, config: config2 }) {
+  const { epicId, stories, index } = await epicStories(client, config2);
+  const epic = await client.getEpic(epicId);
+  const groups = classifyStories(stories, index);
+  const summarize = (items) => items.map((story) => summarizeStory(story, index));
+  return {
+    ok: true,
+    command: "context",
+    generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+    epic: {
+      id: Number(epic.id),
+      name: epic.name,
+      description: epic.description,
+      app_url: epic.app_url
+    },
+    counts: Object.fromEntries(
+      Object.entries(groups).map(([name, items]) => [name, items.length])
+    ),
+    ready: summarize(groups.ready),
+    active: summarize(groups.active),
+    blocked: summarize(groups.blocked),
+    other: summarize(groups.other),
+    recently_done: summarize(groups.done.slice(-10))
+  };
+}
+async function executeCommand(parsed, context) {
+  const command = parsed.command;
+  if (command === "init") return initCommand(parsed, context);
+  if (command === "config") return configCommand(parsed, context);
+  if (command === "doctor") return doctorCommand(parsed, context);
+  if (command === "create") return createCommand(parsed, context);
+  if (command === "list") return listCommand(parsed, context);
+  if (command === "ready") return readyCommand(parsed, context);
+  if (command === "blocked") return blockedCommand(parsed, context);
+  if (command === "show") return showCommand(parsed, context);
+  if (command === "edit") return editCommand(parsed, context);
+  if (command === "start") return startCommand(parsed, context);
+  if (["complete", "cancel", "release"].includes(command)) {
+    return lifecycleCommand(parsed, context, command);
+  }
+  if (command === "handoff") return handoffCommand(parsed, context);
+  if (command === "dep") return dependencyCommand(parsed, context);
+  if (command === "claims") return claimsCommand(parsed, context);
+  if (command === "context") return contextCommand(parsed, context);
+  throw argumentError(`Unknown command: ${command ?? "(none)"}`);
+}
+
+// ../../src/main.js
+var VERSION = "0.1.0";
+function humanStory(story) {
+  const state = story.state?.name ?? story.state?.type ?? "unknown";
+  const owner = story.owners?.map((item) => item.name).join(", ") || "unowned";
+  return `sc-${story.id} [${state}] ${story.title} (${owner})`;
+}
+function formatHuman(payload) {
+  if (payload.command === "ready" || payload.command === "list" || payload.command === "blocked") {
+    if (!payload.stories.length) return `No ${payload.command} Stories in Epic ${payload.epic_id}.`;
+    return payload.stories.map(humanStory).join("\n");
+  }
+  if (payload.story) return humanStory(payload.story);
+  if (payload.command === "context") {
+    return [
+      `Epic ${payload.epic.id}: ${payload.epic.name}`,
+      `Ready ${payload.counts.ready} | Active ${payload.counts.active} | Blocked ${payload.counts.blocked} | Done ${payload.counts.done}`,
+      ...payload.ready.map((story) => `READY ${humanStory(story)}`),
+      ...payload.active.map((story) => `ACTIVE ${humanStory(story)}`),
+      ...payload.blocked.map((story) => `BLOCKED ${humanStory(story)}`)
+    ].join("\n");
+  }
+  if (payload.command === "claims") {
+    if (!payload.claims.length) return `No matching claims in Epic ${payload.epic_id}.`;
+    return payload.claims.map((claim) => {
+      const holder = claim.agent_id ?? "unattributed";
+      const idle = claim.idle_minutes === null ? "?" : `${claim.idle_minutes}m`;
+      const marker = claim.stale ? " STALE" : "";
+      return `${humanStory(claim.story)} held by ${holder}, idle ${idle}${marker}`;
+    }).join("\n");
+  }
+  if (payload.command === "doctor") {
+    return payload.ok ? `Configuration is valid for ${payload.workspace?.slug ?? payload.workspace}.` : `Configuration warnings:
+${payload.warnings.map((warning) => `- ${warning}`).join("\n")}`;
+  }
+  return JSON.stringify(payload, null, 2);
+}
+
+// shortcut-service.ts
+import { Buffer as Buffer2 } from "node:buffer";
+var CONFIG_FILENAME2 = ".shortcut-agent.json";
+var projectConfigSchema = external_exports.object({
   workspace: external_exports.string().min(1),
   epic_id: external_exports.coerce.number().int().positive().optional(),
-  api_url: external_exports.string().url().optional()
+  team_id: external_exports.string().min(1).optional(),
+  agent_id: external_exports.string().min(1).optional(),
+  api_url: external_exports.string().url().optional(),
+  states: external_exports.object({
+    ready: external_exports.coerce.number().int().positive().optional(),
+    started: external_exports.coerce.number().int().positive().optional(),
+    done: external_exports.coerce.number().int().positive().optional(),
+    cancelled: external_exports.coerce.number().int().positive().optional()
+  }).passthrough().optional()
 }).passthrough();
+var MUTATING_COMMANDS = /* @__PURE__ */ new Set([
+  "create",
+  "edit",
+  "start",
+  "complete",
+  "cancel",
+  "release",
+  "handoff",
+  "dep"
+]);
+function decodeFile(content, encoding) {
+  return encoding === "base64" ? Buffer2.from(content, "base64").toString("utf8") : content;
+}
+function parseProjectConfig(textValue, projectName, configPath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(textValue);
+  } catch (error51) {
+    throw new Error(
+      `${projectName}/${configPath} is not valid JSON: ${error51 instanceof Error ? error51.message : String(error51)}`
+    );
+  }
+  const result = projectConfigSchema.safeParse(parsed);
+  if (!result.success) {
+    const detail = result.error.issues.map((issue2) => `${issue2.path.join(".") || "config"}: ${issue2.message}`).join("; ");
+    throw new Error(`${projectName}/${configPath} is not a usable Shortcut config: ${detail}`);
+  }
+  return result.data;
+}
+async function readProjectConfig(bb, project) {
+  const read = async (configPath) => {
+    const file2 = await bb.sdk.projects.fileContent({
+      projectId: project.id,
+      path: configPath
+    });
+    return parseProjectConfig(
+      decodeFile(file2.content, file2.contentEncoding),
+      project.name,
+      configPath
+    );
+  };
+  try {
+    return {
+      project,
+      config: await read(CONFIG_FILENAME2),
+      configPath: CONFIG_FILENAME2
+    };
+  } catch {
+  }
+  let matches = [];
+  try {
+    const result = await bb.sdk.projects.paths({
+      projectId: project.id,
+      query: CONFIG_FILENAME2,
+      limit: "50",
+      includeFiles: "true",
+      includeDirectories: "false"
+    });
+    matches = result.paths.filter(
+      (entry) => entry.kind === "file" && (entry.name === CONFIG_FILENAME2 || entry.path.endsWith(`/${CONFIG_FILENAME2}`))
+    ).map((entry) => entry.path);
+  } catch {
+    return null;
+  }
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    throw new Error(
+      `${project.name} contains multiple ${CONFIG_FILENAME2} files. Point bb at the intended repository root.`
+    );
+  }
+  return { project, config: await read(matches[0]), configPath: matches[0] };
+}
+async function resolveConfiguredProject(bb, requestedProjectId, defaultProjectId) {
+  const selectedId = requestedProjectId ?? defaultProjectId;
+  if (selectedId) {
+    const project = await bb.sdk.projects.get({ projectId: selectedId });
+    const configured2 = await readProjectConfig(bb, project);
+    if (!configured2) {
+      throw new Error(
+        `${project.name} does not contain ${CONFIG_FILENAME2}. Run shortcut-agent init in that project.`
+      );
+    }
+    return configured2;
+  }
+  const projects = await bb.sdk.projects.list();
+  const configured = (await Promise.all(
+    projects.map(async (project) => {
+      try {
+        return await readProjectConfig(bb, project);
+      } catch (error51) {
+        bb.log.warn(
+          `could not inspect ${project.name}: ${error51 instanceof Error ? error51.message : String(error51)}`
+        );
+        return null;
+      }
+    })
+  )).filter((item) => item !== null);
+  if (configured.length === 1) return configured[0];
+  if (configured.length === 0) {
+    throw new Error(
+      `No bb project contains ${CONFIG_FILENAME2}. Run shortcut-agent init, or select a default project in the plugin settings.`
+    );
+  }
+  throw new Error(
+    `Multiple bb projects contain ${CONFIG_FILENAME2}. Select the default project in Extensions \u2192 Plugins \u2192 Shortcut Agent.`
+  );
+}
+function unsupportedOption(parsed, name, message) {
+  if (option(parsed.options, name) !== void 0) {
+    throw new AppError("unsupported_in_bb", message, { exitCode: 2 });
+  }
+}
+function optionInteger(parsed, name, fallback) {
+  const value = option(parsed.options, name);
+  return value === void 0 ? fallback : integer2(value, `--${name}`);
+}
+function effectiveConfig(configured, parsed, token, threadId) {
+  const explicitAgent = option(parsed.options, "agent");
+  const threadAgent = threadId ? `bb:${threadId}` : void 0;
+  const agentId = explicitAgent ?? threadAgent ?? configured.config.agent_id;
+  return {
+    filename: configured.configPath,
+    source: "bb-project",
+    exists: true,
+    localFilename: void 0,
+    apiUrl: process.env.SHORTCUT_API_URL ?? "https://api.app.shortcut.com",
+    token,
+    workspace: text(parsed.options, "workspace") ?? configured.config.workspace,
+    epicId: optionInteger(parsed, "epic", configured.config.epic_id),
+    teamId: text(parsed.options, "team") ?? configured.config.team_id,
+    agentId,
+    agentSource: explicitAgent !== void 0 ? "command" : threadAgent ? "bb-thread" : configured.config.agent_id ? "project-config" : void 0,
+    runId: threadId,
+    states: {
+      ready: optionInteger(parsed, "ready-state", configured.config.states?.ready),
+      started: optionInteger(parsed, "started-state", configured.config.states?.started),
+      done: optionInteger(parsed, "done-state", configured.config.states?.done),
+      cancelled: optionInteger(parsed, "cancelled-state", configured.config.states?.cancelled)
+    },
+    raw: configured.config,
+    localRaw: {}
+  };
+}
+async function projectIdFromContext(bb, context) {
+  if (context.projectId) return context.projectId;
+  if (!context.threadId) return void 0;
+  const thread = await bb.sdk.threads.get({ threadId: context.threadId });
+  return thread.projectId;
+}
+function createShortcutService(bb, settings) {
+  async function execute(argv, context = {}) {
+    try {
+      const parsed = parseArgv(argv);
+      if (!parsed.command) {
+        throw new AppError("invalid_arguments", "A shortcut-agent command is required", {
+          exitCode: 2
+        });
+      }
+      if (parsed.command === "init") {
+        throw new AppError(
+          "unsupported_in_bb",
+          "`bb shortcut-agent init` is not supported because plugin commands cannot write invoking-machine project files. Run `shortcut-agent init` in the project checkout.",
+          { exitCode: 2 }
+        );
+      }
+      unsupportedOption(
+        parsed,
+        "config",
+        "`--config` is not supported by bb integration; scope is resolved from the invoking bb project."
+      );
+      unsupportedOption(
+        parsed,
+        "description-file",
+        "`--description-file` is not supported by bb integration; pass `--description` or use a native Shortcut Agent tool."
+      );
+      unsupportedOption(
+        parsed,
+        "api-url",
+        "`--api-url` is not supported by bb integration because the server-side secret token may only be sent to the server-configured Shortcut API origin."
+      );
+      const current = await settings.get();
+      const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
+      if (!token) {
+        throw configError(
+          "Shortcut API token is not configured. Set it in Extensions \u2192 Plugins \u2192 Shortcut Agent."
+        );
+      }
+      if (MUTATING_COMMANDS.has(parsed.command) && !current.enableAgentMutations) {
+        throw new AppError(
+          "agent_mutations_disabled",
+          "Shortcut Agent mutations are disabled. Enable agent mutations in Extensions \u2192 Plugins \u2192 Shortcut Agent.",
+          { exitCode: 3 }
+        );
+      }
+      const requestedProjectId = await projectIdFromContext(bb, context);
+      const configured = await resolveConfiguredProject(bb, requestedProjectId, current.project);
+      const config2 = effectiveConfig(configured, parsed, token, context.threadId);
+      const makeClient = ({ workspace = config2.workspace } = {}) => new ShortcutClient({
+        token,
+        workspace,
+        baseUrl: config2.apiUrl,
+        signal: context.signal
+      });
+      const client = makeClient();
+      const commandPayload = await executeCommand(parsed, {
+        config: config2,
+        client,
+        makeClient,
+        env: {}
+      });
+      return {
+        exitCode: commandPayload.ok === false && parsed.command === "doctor" ? 3 : 0,
+        payload: {
+          ...commandPayload,
+          config_file: commandPayload.config_file ?? configured.configPath,
+          config_source: commandPayload.config_source ?? "bb-project",
+          project: configured.project
+        }
+      };
+    } catch (error51) {
+      const { payload, exitCode } = toErrorPayload(error51);
+      return { exitCode, payload };
+    }
+  }
+  async function executeTool(argv, context) {
+    const result = await execute(argv, context);
+    const textValue = JSON.stringify(result.payload, null, 2);
+    if (result.exitCode === 0) return textValue;
+    return { content: [{ type: "text", text: textValue }], isError: true };
+  }
+  return { execute, executeTool };
+}
+
+// server.ts
 var nodeStatusSchema = external_exports.enum(["ready", "active", "blocked", "done", "other"]);
 var graphNodeSchema = external_exports.object({
   id: external_exports.number().int(),
@@ -14905,103 +16817,6 @@ var rpcContract = defineRpcContract({
     output: graphResponseSchema
   }
 });
-function decodeFile(content, encoding) {
-  return encoding === "base64" ? Buffer2.from(content, "base64").toString("utf8") : content;
-}
-function parseConfig(text, projectName, configPath) {
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error51) {
-    throw new Error(
-      `${projectName}/${configPath} is not valid JSON: ${error51 instanceof Error ? error51.message : String(error51)}`
-    );
-  }
-  const result = configSchema.safeParse(parsed);
-  if (!result.success) {
-    const detail = result.error.issues.map((issue2) => `${issue2.path.join(".") || "config"}: ${issue2.message}`).join("; ");
-    throw new Error(`${projectName}/${configPath} is not a usable Shortcut config: ${detail}`);
-  }
-  return result.data;
-}
-async function readProjectConfig(bb, project) {
-  const read = async (configPath) => {
-    const file2 = await bb.sdk.projects.fileContent({
-      projectId: project.id,
-      path: configPath
-    });
-    return parseConfig(
-      decodeFile(file2.content, file2.contentEncoding),
-      project.name,
-      configPath
-    );
-  };
-  try {
-    return {
-      project,
-      config: await read(CONFIG_FILENAME),
-      configPath: CONFIG_FILENAME
-    };
-  } catch {
-  }
-  let matches = [];
-  try {
-    const result = await bb.sdk.projects.paths({
-      projectId: project.id,
-      query: CONFIG_FILENAME,
-      limit: "50",
-      includeFiles: "true",
-      includeDirectories: "false"
-    });
-    matches = result.paths.filter(
-      (entry) => entry.kind === "file" && (entry.name === CONFIG_FILENAME || entry.path.endsWith(`/${CONFIG_FILENAME}`))
-    ).map((entry) => entry.path);
-  } catch {
-    return null;
-  }
-  if (matches.length === 0) return null;
-  if (matches.length > 1) {
-    throw new Error(
-      `${project.name} contains multiple ${CONFIG_FILENAME} files. Point bb at the intended repository root.`
-    );
-  }
-  return { project, config: await read(matches[0]), configPath: matches[0] };
-}
-async function resolveConfiguredProject(bb, requestedProjectId, defaultProjectId) {
-  const selectedId = requestedProjectId ?? defaultProjectId;
-  if (selectedId) {
-    const project = await bb.sdk.projects.get({ projectId: selectedId });
-    const configured2 = await readProjectConfig(bb, project);
-    if (!configured2) {
-      throw new Error(
-        `${project.name} does not contain ${CONFIG_FILENAME}. Run shortcut-agent init in that project.`
-      );
-    }
-    return configured2;
-  }
-  const projects = await bb.sdk.projects.list();
-  const configured = (await Promise.all(
-    projects.map(async (project) => {
-      try {
-        return await readProjectConfig(bb, project);
-      } catch (error51) {
-        bb.log.warn(
-          `could not inspect ${project.name}: ${error51 instanceof Error ? error51.message : String(error51)}`
-        );
-        return null;
-      }
-    })
-  )).filter((item) => item !== null);
-  if (configured.length === 1) return configured[0];
-  if (configured.length === 0) {
-    throw new Error(
-      `No bb project contains ${CONFIG_FILENAME}. Run shortcut-agent init, or select a default project in the plugin settings.`
-    );
-  }
-  throw new Error(
-    `Multiple bb projects contain ${CONFIG_FILENAME}. Select the default project in Extensions \u2192 Plugins \u2192 Shortcut Agent.`
-  );
-}
 function statusByStoryId(stories, states) {
   const groups = classifyStories(stories, states);
   const statuses = /* @__PURE__ */ new Map();
@@ -15015,13 +16830,19 @@ async function plugin(bb) {
     apiToken: {
       type: "string",
       label: "Shortcut API token",
-      description: "A Shortcut v4 read token. Stored as a bb secret and never sent to the frontend.",
+      description: "A Shortcut v4 read/write token. Stored as a bb secret and never sent to agents, the frontend, shell, or environment.",
       secret: true
     },
     project: {
       type: "project",
       label: "Default bb project",
-      description: "Optional. Used when the panel is not opened from a project, or when several projects have Shortcut config."
+      description: "Optional. Used when the panel, CLI command, or native tool has no project context, or when several projects have Shortcut config."
+    },
+    enableAgentMutations: {
+      type: "boolean",
+      label: "Enable agent mutations",
+      description: "Allow bb plugin commands and native agent tools to create or change Shortcut Stories. Read-only commands and tools remain available when disabled.",
+      default: false
     }
   });
   const initial = await settings.get();
@@ -15030,6 +16851,255 @@ async function plugin(bb) {
       "Set the Shortcut API token in Extensions \u2192 Plugins \u2192 Shortcut Agent."
     );
   }
+  const shortcut = createShortcutService(bb, settings);
+  let mutationsEnabled = initial.enableAgentMutations;
+  settings.onChange((next) => {
+    mutationsEnabled = next.enableAgentMutations;
+  });
+  bb.cli.register({
+    name: "shortcut-agent",
+    summary: "Read and coordinate Shortcut Agent Stories using the plugin's server-side token and current bb project scope.",
+    commands: [
+      { name: "context", summary: "Summarize the configured Epic work graph", usage: "bb shortcut-agent context [--epic ID]" },
+      { name: "list", summary: "List every Story in the configured Epic", usage: "bb shortcut-agent list [--epic ID]" },
+      { name: "ready", summary: "List unblocked, unclaimed Ready Stories", usage: "bb shortcut-agent ready [--epic ID]" },
+      { name: "blocked", summary: "List blocked Stories and their blockers", usage: "bb shortcut-agent blocked [--epic ID]" },
+      { name: "show", summary: "Show a Story, description, and recent comments", usage: "bb shortcut-agent show STORY [--all-comments]" },
+      { name: "create", summary: "Create a Story in the configured Epic (mutations must be enabled)", usage: "bb shortcut-agent create --title TITLE --description TEXT [relations]" },
+      { name: "edit", summary: "Edit an existing Story (mutations must be enabled)", usage: "bb shortcut-agent edit STORY [field options]" },
+      { name: "start", summary: "Claim and start a Ready Story (mutations must be enabled)", usage: "bb shortcut-agent start STORY [--agent ID]" },
+      { name: "complete", summary: "Complete an owned Story (mutations must be enabled)", usage: "bb shortcut-agent complete STORY --summary TEXT" },
+      { name: "cancel", summary: "Cancel a Story with a reason (mutations must be enabled)", usage: "bb shortcut-agent cancel STORY --reason TEXT" },
+      { name: "release", summary: "Release an owned Story back to Ready (mutations must be enabled)", usage: "bb shortcut-agent release STORY --reason TEXT" },
+      { name: "handoff", summary: "Record progress and optionally release a Story (mutations must be enabled)", usage: "bb shortcut-agent handoff STORY --summary TEXT [--release]" },
+      { name: "dep", summary: "Add or remove one Story relationship (mutations must be enabled)", usage: "bb shortcut-agent dep add|remove STORY --blocked-by|--blocks|--related-to OTHER" },
+      { name: "claims", summary: "List in-flight or stale claims", usage: "bb shortcut-agent claims [--stale] [--stale-minutes N]" },
+      { name: "config", summary: "Show effective bb project Shortcut Agent configuration", usage: "bb shortcut-agent config" },
+      { name: "doctor", summary: "Check Shortcut connectivity and project configuration", usage: "bb shortcut-agent doctor" }
+    ],
+    async run(argv, context) {
+      const parsed = parseArgv(argv);
+      if (parsed.command === "help" || flag(parsed.options, "help")) {
+        const helpCommand = parsed.command === "help" ? parsed.args[0] : parsed.command;
+        const helpSubcommand = parsed.command === "help" ? parsed.args[1] : parsed.subcommand;
+        const help = helpCommand ? commandHelp(helpCommand, helpSubcommand) : globalHelp(VERSION);
+        if (!help) {
+          return { exitCode: 2, stderr: `Unknown help topic: ${[helpCommand, helpSubcommand].filter(Boolean).join(" ")}
+` };
+        }
+        return {
+          exitCode: 0,
+          stdout: `${help.replaceAll("shortcut-agent", "bb shortcut-agent")}
+
+bb integration: project scope and API origin are server-controlled; init, --config, --api-url, and --description-file are unsupported.
+`
+        };
+      }
+      if (parsed.command === "version" || flag(parsed.options, "version")) {
+        return { exitCode: 0, stdout: `${VERSION}
+` };
+      }
+      const result = await shortcut.execute(argv, context);
+      const output = flag(parsed.options, "human") ? formatHuman(result.payload) : JSON.stringify(result.payload, null, flag(parsed.options, "pretty") ? 2 : 0);
+      return result.exitCode === 0 ? { exitCode: 0, stdout: `${output}
+` } : { exitCode: result.exitCode, stderr: `${output}
+` };
+    }
+  });
+  const readToolNames = ["shortcut_agent_context", "shortcut_agent_show"];
+  const mutationToolNames = [
+    "shortcut_agent_create",
+    "shortcut_agent_edit",
+    "shortcut_agent_add_dependency",
+    "shortcut_agent_start",
+    "shortcut_agent_complete",
+    "shortcut_agent_release"
+  ];
+  bb.agents.configure(() => ({
+    tools: mutationsEnabled ? [...readToolNames, ...mutationToolNames] : readToolNames,
+    skills: []
+  }));
+  bb.agents.registerTool({
+    name: "shortcut_agent_context",
+    description: "Summarize ready, active, blocked, and recently completed Stories in the Shortcut Epic configured for the current bb project.",
+    parameters: external_exports.object({ epicId: external_exports.number().int().positive().optional() }).strict(),
+    experimental_statusLabels: { pending: "Loading Shortcut work graph", completed: "Loaded Shortcut work graph" },
+    execute({ epicId }, context) {
+      return shortcut.executeTool(
+        ["context", ...epicId ? ["--epic", String(epicId)] : []],
+        context
+      );
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_show",
+    description: "Read one Shortcut Story, including its full description and recent human or agent-event comments. Always use this before starting work on a Story.",
+    instructions: "Call shortcut_agent_show before shortcut_agent_start so the Story description and handoff context are known.",
+    parameters: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      allComments: external_exports.boolean().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Reading Shortcut Story", completed: "Read Shortcut Story" },
+    execute({ storyId, allComments }, context) {
+      return shortcut.executeTool(
+        ["show", String(storyId), ...allComments ? ["--all-comments"] : []],
+        context
+      );
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_create",
+    description: "Create an unowned Shortcut Story in the configured Epic's Ready state, with optional dependency links. Requires Enable agent mutations.",
+    parameters: external_exports.object({
+      title: external_exports.string().min(1),
+      description: external_exports.string().min(1),
+      type: external_exports.enum(["bug", "chore", "feature"]).optional(),
+      estimate: external_exports.number().int().positive().optional(),
+      blockedBy: external_exports.array(external_exports.number().int().positive()).optional(),
+      blocks: external_exports.array(external_exports.number().int().positive()).optional(),
+      relatedTo: external_exports.array(external_exports.number().int().positive()).optional(),
+      epicId: external_exports.number().int().positive().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Creating Shortcut Story", completed: "Created Shortcut Story" },
+    execute(input, context) {
+      const argv = ["create", "--title", input.title, "--description", input.description];
+      if (input.type) argv.push("--type", input.type);
+      if (input.estimate) argv.push("--estimate", String(input.estimate));
+      if (input.epicId) argv.push("--epic", String(input.epicId));
+      for (const id of input.blockedBy ?? []) argv.push("--blocked-by", String(id));
+      for (const id of input.blocks ?? []) argv.push("--blocks", String(id));
+      for (const id of input.relatedTo ?? []) argv.push("--related-to", String(id));
+      return shortcut.executeTool(argv, context);
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_edit",
+    description: "Edit fields on an existing Shortcut Story. Lifecycle state changes should use the dedicated start, complete, or release tools. Requires Enable agent mutations.",
+    parameters: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      title: external_exports.string().min(1).optional(),
+      description: external_exports.string().optional(),
+      type: external_exports.enum(["bug", "chore", "feature"]).optional(),
+      estimate: external_exports.number().int().positive().optional(),
+      clearEstimate: external_exports.boolean().optional(),
+      moveToEpicId: external_exports.number().int().positive().optional(),
+      teamId: external_exports.string().min(1).optional(),
+      clearTeam: external_exports.boolean().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Editing Shortcut Story", completed: "Edited Shortcut Story" },
+    execute(input, context) {
+      const argv = ["edit", String(input.storyId)];
+      if (input.title !== void 0) argv.push("--title", input.title);
+      if (input.description !== void 0) argv.push("--description", input.description);
+      if (input.type) argv.push("--type", input.type);
+      if (input.estimate) argv.push("--estimate", String(input.estimate));
+      if (input.clearEstimate) argv.push("--clear-estimate");
+      if (input.moveToEpicId) argv.push("--move-to-epic", String(input.moveToEpicId));
+      if (input.teamId) argv.push("--set-team", input.teamId);
+      if (input.clearTeam) argv.push("--clear-team");
+      return shortcut.executeTool(argv, context);
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_add_dependency",
+    description: "Add one blocks, blocked-by, or related-to relationship between Shortcut Stories, preserving the CLI's cycle and cross-Epic safety checks. Requires Enable agent mutations.",
+    parameters: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      relation: external_exports.enum(["blocked-by", "blocks", "related-to"]),
+      otherStoryId: external_exports.number().int().positive(),
+      allowCrossEpic: external_exports.boolean().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Adding Shortcut dependency", completed: "Added Shortcut dependency" },
+    execute(input, context) {
+      return shortcut.executeTool(
+        [
+          "dep",
+          "add",
+          String(input.storyId),
+          `--${input.relation}`,
+          String(input.otherStoryId),
+          ...input.allowCrossEpic ? ["--allow-cross-epic"] : []
+        ],
+        context
+      );
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_start",
+    description: "Claim an unowned, unblocked Ready Story and move it to Started. The current bb thread is used as agent identity unless agentId is supplied. Requires Enable agent mutations.",
+    parameters: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      agentId: external_exports.string().min(1).optional(),
+      epicId: external_exports.number().int().positive().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Claiming Shortcut Story", completed: "Claimed Shortcut Story" },
+    execute(input, context) {
+      return shortcut.executeTool(
+        [
+          "start",
+          String(input.storyId),
+          ...input.agentId ? ["--agent", input.agentId] : [],
+          ...input.epicId ? ["--epic", String(input.epicId)] : []
+        ],
+        context
+      );
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_complete",
+    description: "Record completion evidence and move an owned Started Story to Done. Requires Enable agent mutations.",
+    parameters: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      summary: external_exports.string().min(1),
+      verification: external_exports.string().min(1).optional(),
+      evidence: external_exports.string().min(1).optional(),
+      changed: external_exports.string().min(1).optional(),
+      remaining: external_exports.string().min(1).optional(),
+      agentId: external_exports.string().min(1).optional(),
+      epicId: external_exports.number().int().positive().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Completing Shortcut Story", completed: "Completed Shortcut Story" },
+    execute(input, context) {
+      const argv = ["complete", String(input.storyId), "--summary", input.summary];
+      for (const [name, value] of [
+        ["verification", input.verification],
+        ["evidence", input.evidence],
+        ["changed", input.changed],
+        ["remaining", input.remaining],
+        ["agent", input.agentId]
+      ]) {
+        if (value) argv.push(`--${name}`, value);
+      }
+      if (input.epicId) argv.push("--epic", String(input.epicId));
+      return shortcut.executeTool(argv, context);
+    }
+  });
+  bb.agents.registerTool({
+    name: "shortcut_agent_release",
+    description: "Record a reason, clear Story owners, and return a Story to Ready. Use force only to recover a confirmed stale claim. Requires Enable agent mutations.",
+    parameters: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      reason: external_exports.string().min(1),
+      force: external_exports.boolean().optional(),
+      agentId: external_exports.string().min(1).optional(),
+      epicId: external_exports.number().int().positive().optional()
+    }).strict(),
+    experimental_statusLabels: { pending: "Releasing Shortcut Story", completed: "Released Shortcut Story" },
+    execute(input, context) {
+      return shortcut.executeTool(
+        [
+          "release",
+          String(input.storyId),
+          "--reason",
+          input.reason,
+          ...input.force ? ["--force"] : [],
+          ...input.agentId ? ["--agent", input.agentId] : [],
+          ...input.epicId ? ["--epic", String(input.epicId)] : []
+        ],
+        context
+      );
+    }
+  });
   bb.rpc.register(rpcContract, {
     async loadGraph({ projectId, epicId }) {
       const current = await settings.get();
@@ -15049,7 +17119,7 @@ async function plugin(bb) {
       const client = new ShortcutClient({
         token,
         workspace: configured.config.workspace,
-        baseUrl: configured.config.api_url ?? process.env.SHORTCUT_API_URL ?? "https://api.app.shortcut.com"
+        baseUrl: process.env.SHORTCUT_API_URL ?? "https://api.app.shortcut.com"
       });
       const [epic, stories, workflowStates] = await Promise.all([
         client.getEpic(selectedEpicId),
@@ -15066,7 +17136,7 @@ async function plugin(bb) {
       );
       const index = stateIndex(workflowStates);
       const { groups, statuses } = statusByStoryId(stories, index);
-      const storyIds = new Set(stories.map((story) => Number(story.id)));
+      const storyIds2 = new Set(stories.map((story) => Number(story.id)));
       const nodes = stories.map((story) => {
         const summary = summarizeStory(story, index);
         const state = storyState(story, index);
@@ -15082,7 +17152,7 @@ async function plugin(bb) {
           blocked: summary.blocked,
           owners: summary.owners.map((owner) => owner.name ?? String(owner.id)),
           position: Number.isFinite(numericPosition) ? numericPosition : null,
-          externalBlockedBy: summary.blocked_by.filter((id) => !storyIds.has(id)),
+          externalBlockedBy: summary.blocked_by.filter((id) => !storyIds2.has(id)),
           updatedAt: summary.updated_at ?? null
         };
       });
@@ -15094,7 +17164,7 @@ async function plugin(bb) {
           index
         );
         for (const target of summary.blocks) {
-          if (!storyIds.has(target)) continue;
+          if (!storyIds2.has(target)) continue;
           const key = `${node.id}:${target}`;
           if (edgeKeys.has(key)) continue;
           edgeKeys.add(key);
@@ -15102,7 +17172,7 @@ async function plugin(bb) {
         }
       }
       const warnings = [];
-      if (configured.configPath !== CONFIG_FILENAME) {
+      if (configured.configPath !== CONFIG_FILENAME2) {
         warnings.push(`Using nested config ${configured.configPath}.`);
       }
       const externalCount = nodes.reduce(

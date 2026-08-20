@@ -145,4 +145,187 @@ describe("Shortcut Agent plugin backend", () => {
     ]);
     await harness.lifecycle.dispose();
   });
+
+  it("exposes read tools while mutations are disabled and gates CLI writes", async () => {
+    const project = {
+      id: "proj_1",
+      kind: "standard" as const,
+      name: "Agent project",
+      gitRemoteUrl: null,
+      createdAt: 1,
+      updatedAt: 1,
+      sources: [],
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "shortcut-epic",
+      settings: { apiToken: "secret" },
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async () => ({
+            content: JSON.stringify({
+              workspace: "acme",
+              epic_id: 42,
+              states: { ready: 11, started: 10, done: 12 },
+            }),
+            contentEncoding: "utf8" as const,
+            mimeType: "application/json",
+            sizeBytes: 100,
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+
+    const context = {
+      thread: { id: "thread-1", title: null, parentThreadId: null, sourceThreadId: null },
+      project: { id: "proj_1", kind: "standard" as const, name: "Agent project", gitRemoteUrl: null },
+      environment: {
+        id: "env-1",
+        name: null,
+        path: "/repo",
+        workspaceProvisionType: "unmanaged" as const,
+        branchName: "main",
+      },
+      host: { id: "host-1", name: "Local" },
+      provider: {
+        id: "codex",
+        model: "test",
+        capabilities: {
+          supportsServiceTier: false,
+          supportsNativeUserQuestion: false,
+          fork: "none" as const,
+          supportsManualCompaction: false,
+          supportsThreadArchive: false,
+          supportsThreadRename: false,
+          supportsWorkflows: false,
+          permissionModes: ["full" as const],
+          reasoningLevels: ["medium"],
+        },
+      },
+      sideChat: false,
+      origin: { kind: null, pluginId: null },
+    };
+    const readOnly = await harness.behavior.resolveAgentConfiguration(context);
+    expect(readOnly.tools.map((tool) => tool.name)).toEqual([
+      "shortcut_agent_context",
+      "shortcut_agent_show",
+    ]);
+
+    const blocked = await harness.behavior.runCli(
+      ["create", "--title", "Nope", "--description", "Disabled"],
+      { projectId: "proj_1", threadId: "thread-1" },
+    );
+    expect(blocked.exitCode).toBe(3);
+    expect(JSON.parse(blocked.stderr)).toMatchObject({
+      error: { code: "agent_mutations_disabled" },
+    });
+
+    const redirected = await harness.behavior.runCli(
+      ["show", "7", "--api-url", "https://example.test"],
+      { projectId: "proj_1", threadId: "thread-1" },
+    );
+    expect(redirected.exitCode).toBe(2);
+    expect(JSON.parse(redirected.stderr)).toMatchObject({
+      error: { code: "unsupported_in_bb" },
+    });
+
+    await harness.behavior.setSettings({ enableAgentMutations: true });
+    const writable = await harness.behavior.resolveAgentConfiguration(context);
+    expect(writable.tools.map((tool) => tool.name)).toContain("shortcut_agent_start");
+    await harness.lifecycle.dispose();
+  });
+
+  it("runs lifecycle tools with the secret token and bb thread identity server-side", async () => {
+    let storyReads = 0;
+    let claimText = "";
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer secret-token");
+      if (url.pathname.endsWith("/stories/7") && init?.method === "GET") {
+        storyReads += 1;
+        return json({
+          entity: {
+            id: 7,
+            name: "Claim me",
+            epic: { id: 42 },
+            workflow_state: { id: storyReads === 1 ? 11 : 10 },
+            owners: {
+              entities: storyReads === 1 ? [] : [{ id: "member-1", name: "Agent owner" }],
+            },
+            story_links: { entities: [] },
+            blocked: false,
+            archived: false,
+          },
+        });
+      }
+      if (url.pathname.endsWith("/whoami")) {
+        return json({ entity: { member: { id: "member-1" } } });
+      }
+      if (url.pathname.endsWith("/workflow-states")) {
+        return json({
+          entities: [
+            { id: 11, name: "Ready", type: "unstarted" },
+            { id: 10, name: "In Progress", type: "started" },
+            { id: 12, name: "Done", type: "done" },
+          ],
+        });
+      }
+      if (url.pathname.endsWith("/stories/7") && init?.method === "PATCH") {
+        return json({ entity: { id: 7 } });
+      }
+      if (url.pathname.endsWith("/stories/7/comments") && init?.method === "POST") {
+        claimText = String(JSON.parse(String(init.body)).text);
+        return json({ entity: { id: 99 } });
+      }
+      throw new Error(`Unexpected Shortcut request: ${init?.method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const project = {
+      id: "proj_1",
+      kind: "standard" as const,
+      name: "Agent project",
+      gitRemoteUrl: null,
+      createdAt: 1,
+      updatedAt: 1,
+      sources: [],
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "shortcut-epic",
+      settings: { apiToken: "secret-token", enableAgentMutations: true },
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async () => ({
+            content: JSON.stringify({
+              workspace: "acme",
+              epic_id: 42,
+              states: { ready: 11, started: 10, done: 12 },
+            }),
+            contentEncoding: "utf8" as const,
+            mimeType: "application/json",
+            sizeBytes: 100,
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+
+    const result = await harness.behavior.callAgentTool(
+      "shortcut_agent_start",
+      { storyId: 7 },
+      { projectId: "proj_1", threadId: "thread-123" },
+    );
+    expect(typeof result).toBe("string");
+    expect(JSON.parse(result as string)).toMatchObject({
+      ok: true,
+      command: "start",
+      story: { id: 7, state: { id: 10 } },
+    });
+    expect(claimText).toContain('"agent_id":"bb:thread-123"');
+    expect(claimText).toContain('"run_id":"thread-123"');
+    expect(String(result)).not.toContain("secret-token");
+    await harness.lifecycle.dispose();
+  });
 });

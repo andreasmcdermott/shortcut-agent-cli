@@ -151,6 +151,9 @@
     .flex {
       display: flex;
     }
+    .inline {
+      display: inline;
+    }
     .inline-flex {
       display: inline-flex;
     }
