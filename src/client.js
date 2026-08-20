@@ -67,6 +67,7 @@ export class ShortcutClient {
     sleeper = sleep,
     maxRetries = 2,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
   }) {
     this.token = token;
     this.workspace = workspace;
@@ -75,6 +76,7 @@ export class ShortcutClient {
     this.sleep = sleeper;
     this.maxRetries = maxRetries;
     this.timeoutMs = timeoutMs;
+    this.signal = signal;
   }
 
   workspacePath(pathname) {
@@ -113,7 +115,9 @@ export class ShortcutClient {
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
-          signal: AbortSignal.timeout(this.timeoutMs),
+          signal: this.signal
+            ? AbortSignal.any([this.signal, AbortSignal.timeout(this.timeoutMs)])
+            : AbortSignal.timeout(this.timeoutMs),
         });
       } catch (error) {
         if (method === "GET" && attempt < this.maxRetries) {

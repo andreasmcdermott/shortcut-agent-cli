@@ -17,7 +17,7 @@ function humanStory(story) {
   return `sc-${story.id} [${state}] ${story.title} (${owner})`;
 }
 
-function formatHuman(payload) {
+export function formatHuman(payload) {
   if (payload.command === "ready" || payload.command === "list" || payload.command === "blocked") {
     if (!payload.stories.length) return `No ${payload.command} Stories in Epic ${payload.epic_id}.`;
     return payload.stories.map(humanStory).join("\n");

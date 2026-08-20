@@ -18,8 +18,9 @@ The graph:
 - warns instead of hanging when pre-existing Shortcut data contains a cycle
 - refreshes every 60 seconds and on demand
 
-Story cards link to Shortcut. The panel is read-only; agents should keep using
-`shortcut-agent` for claims and lifecycle mutations. Use the **Epic ID** control
+Story cards link to Shortcut. The graph UI is read-only, while agents can use
+the plugin's server-side `bb shortcut-agent` command or native tools for claims
+and lifecycle mutations. Use the **Epic ID** control
 in the panel header to switch Epics. The selected ID is encoded in the panel URL,
 so each Epic can be bookmarked or opened independently. The last successfully
 opened Epic is remembered per bb project in the current browser; **Use default**
@@ -68,10 +69,14 @@ package's development dependencies.
 
 Open **Extensions → Plugins → Shortcut Agent** and set:
 
-- **Shortcut API token** — required unless the bb server process already has
-  `SHORTCUT_API_TOKEN`; stored as a bb secret and never sent to the frontend
+- **Shortcut API token** — a v4 read/write token, required unless the bb server
+  process already has `SHORTCUT_API_TOKEN`; stored as a bb secret and never sent
+  to agents, the frontend, shell, or project files
 - **Default bb project** — optional; use it when several bb projects contain a
-  `.shortcut-agent.json`, or when the panel has no project context
+  `.shortcut-agent.json`, or when an invocation has no project context
+- **Enable agent mutations** — defaults off; enables Story mutations through
+  both `bb shortcut-agent` and native agent tools. Read operations remain
+  available while disabled
 
 The secret setting is recommended for desktop bb. Exporting a token in an agent
 terminal does not retroactively add it to an already-running bb server process.
@@ -83,21 +88,59 @@ shortcut-agent init --epic 12345
 ```
 
 `epic_id` is only the initial default. It may be omitted when every view uses an
-Epic ID selected in the panel. Workspace and API configuration still come from
-the project config.
+Epic ID selected in the panel. Workspace and workflow configuration still come
+from the project config. For token safety, the API origin does not: the plugin
+uses Shortcut's production API, or the bb server process's trusted
+`SHORTCUT_API_URL` override.
 
 The plugin first checks the project root and then performs a bounded nested
 lookup. A project with more than one config is intentionally rejected because
-there is no safe way to infer which Epic the panel should display. The ignored
-`.shortcut-agent.local.json` is not read: agent identity is unrelated to this
-read-only Epic view.
+there is no safe way to infer which Epic the panel should display. The ignored `.shortcut-agent.local.json` is not read by the server. Lifecycle
+commands derive a stable `bb:<thread-id>` identity from the invoking thread, or
+accept an explicit `--agent` / native-tool `agentId`. A plugin command invoked
+without thread context must supply `--agent` for operations that record agent
+events.
 
 If no default project is selected, the plugin auto-discovers all bb projects.
 Exactly one configured project is selected automatically; zero or multiple
 matches produce an actionable configuration message.
 
+## Agent and CLI usage
+
+The plugin registers one agent-discoverable bb command:
+
+```sh
+bb shortcut-agent context
+bb shortcut-agent show 319163
+bb shortcut-agent start 319163
+bb shortcut-agent complete 319163 --summary 'Implemented the change' \
+  --verification 'npm test'
+bb shortcut-agent dep add 319163 --blocked-by 319100
+```
+
+Scope comes from the invoking thread's bb project and its
+`.shortcut-agent.json`; the optional default project is only a fallback. The
+command supports the standalone CLI's read and mutation workflows except
+`init`, `--config`, `--api-url`, and `--description-file`. Filesystem options
+require invoking-machine access, while API-origin overrides could redirect the
+server secret; run standalone `shortcut-agent init` and pass inline
+`--description` instead.
+
+The plugin also registers these native tools:
+
+- `shortcut_agent_context` and `shortcut_agent_show` (always selected)
+- `shortcut_agent_create`, `shortcut_agent_edit`, and
+  `shortcut_agent_add_dependency`
+- `shortcut_agent_start`, `shortcut_agent_complete`, and
+  `shortcut_agent_release`
+
+Mutation tools are selected only when **Enable agent mutations** is on, and all
+mutation handlers re-check that setting at execution time. Tool and command
+results contain normalized Shortcut data, never the token.
+
 After changing settings, bb automatically retries a plugin waiting for
-configuration. A manual reload is also available:
+configuration. Agent tool selection changes apply the next time an agent session
+starts or resumes. A manual reload is also available:
 
 ```sh
 bb plugin reload shortcut-epic

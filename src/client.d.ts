@@ -48,6 +48,7 @@ export interface ShortcutClientOptions {
   workspace?: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }
 
 export class ShortcutClient {

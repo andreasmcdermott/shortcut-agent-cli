@@ -1,7 +1,9 @@
-import { Buffer } from "node:buffer";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import { parseArgv, flag } from "../../src/args.js";
 import { ShortcutClient } from "../../src/client.js";
+import { commandHelp, globalHelp } from "../../src/help.js";
+import { formatHuman, VERSION } from "../../src/main.js";
 import {
   classifyStories,
   stateIndex,
@@ -9,16 +11,11 @@ import {
   summarizeStory,
 } from "../../src/domain.js";
 import type { GraphEdge, GraphNode, NodeStatus } from "./graph.js";
-
-const CONFIG_FILENAME = ".shortcut-agent.json";
-
-const configSchema = z
-  .object({
-    workspace: z.string().min(1),
-    epic_id: z.coerce.number().int().positive().optional(),
-    api_url: z.string().url().optional(),
-  })
-  .passthrough();
+import {
+  CONFIG_FILENAME,
+  createShortcutService,
+  resolveConfiguredProject,
+} from "./shortcut-service.js";
 
 const nodeStatusSchema = z.enum(["ready", "active", "blocked", "done", "other"]);
 
@@ -78,141 +75,6 @@ export const rpcContract = defineRpcContract({
   },
 });
 
-interface ProjectConfig {
-  workspace: string;
-  epic_id?: number;
-  api_url?: string;
-}
-
-interface ConfiguredProject {
-  project: { id: string; name: string };
-  config: ProjectConfig;
-  configPath: string;
-}
-
-function decodeFile(content: string, encoding: "utf8" | "base64") {
-  return encoding === "base64" ? Buffer.from(content, "base64").toString("utf8") : content;
-}
-
-function parseConfig(text: string, projectName: string, configPath: string): ProjectConfig {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    throw new Error(
-      `${projectName}/${configPath} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  const result = configSchema.safeParse(parsed);
-  if (!result.success) {
-    const detail = result.error.issues
-      .map((issue) => `${issue.path.join(".") || "config"}: ${issue.message}`)
-      .join("; ");
-    throw new Error(`${projectName}/${configPath} is not a usable Shortcut config: ${detail}`);
-  }
-  return result.data;
-}
-
-async function readProjectConfig(
-  bb: BbPluginApi,
-  project: { id: string; name: string },
-): Promise<ConfiguredProject | null> {
-  const read = async (configPath: string) => {
-    const file = await bb.sdk.projects.fileContent({
-      projectId: project.id,
-      path: configPath,
-    });
-    return parseConfig(
-      decodeFile(file.content, file.contentEncoding),
-      project.name,
-      configPath,
-    );
-  };
-
-  try {
-    return {
-      project,
-      config: await read(CONFIG_FILENAME),
-      configPath: CONFIG_FILENAME,
-    };
-  } catch {
-    // A bb project normally points at the repository root. Fall back to a
-    // bounded recursive lookup so a monorepo can still contain one CLI scope.
-  }
-
-  let matches: string[] = [];
-  try {
-    const result = await bb.sdk.projects.paths({
-      projectId: project.id,
-      query: CONFIG_FILENAME,
-      limit: "50",
-      includeFiles: "true",
-      includeDirectories: "false",
-    });
-    matches = result.paths
-      .filter(
-        (entry) =>
-          entry.kind === "file" &&
-          (entry.name === CONFIG_FILENAME || entry.path.endsWith(`/${CONFIG_FILENAME}`)),
-      )
-      .map((entry) => entry.path);
-  } catch {
-    return null;
-  }
-
-  if (matches.length === 0) return null;
-  if (matches.length > 1) {
-    throw new Error(
-      `${project.name} contains multiple ${CONFIG_FILENAME} files. Point bb at the intended repository root.`,
-    );
-  }
-  return { project, config: await read(matches[0]!), configPath: matches[0]! };
-}
-
-async function resolveConfiguredProject(
-  bb: BbPluginApi,
-  requestedProjectId: string | null,
-  defaultProjectId: string | undefined,
-): Promise<ConfiguredProject> {
-  const selectedId = requestedProjectId ?? defaultProjectId;
-  if (selectedId) {
-    const project = await bb.sdk.projects.get({ projectId: selectedId });
-    const configured = await readProjectConfig(bb, project);
-    if (!configured) {
-      throw new Error(
-        `${project.name} does not contain ${CONFIG_FILENAME}. Run shortcut-agent init in that project.`,
-      );
-    }
-    return configured;
-  }
-
-  const projects = await bb.sdk.projects.list();
-  const configured = (
-    await Promise.all(
-      projects.map(async (project) => {
-        try {
-          return await readProjectConfig(bb, project);
-        } catch (error) {
-          bb.log.warn(
-            `could not inspect ${project.name}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          return null;
-        }
-      }),
-    )
-  ).filter((item): item is ConfiguredProject => item !== null);
-
-  if (configured.length === 1) return configured[0]!;
-  if (configured.length === 0) {
-    throw new Error(
-      `No bb project contains ${CONFIG_FILENAME}. Run shortcut-agent init, or select a default project in the plugin settings.`,
-    );
-  }
-  throw new Error(
-    `Multiple bb projects contain ${CONFIG_FILENAME}. Select the default project in Extensions → Plugins → Shortcut Agent.`,
-  );
-}
-
 function statusByStoryId(
   stories: Parameters<typeof classifyStories>[0],
   states: Parameters<typeof classifyStories>[1],
@@ -230,14 +92,21 @@ export default async function plugin(bb: BbPluginApi) {
     apiToken: {
       type: "string",
       label: "Shortcut API token",
-      description: "A Shortcut v4 read token. Stored as a bb secret and never sent to the frontend.",
+      description: "A Shortcut v4 read/write token. Stored as a bb secret and never sent to agents, the frontend, shell, or environment.",
       secret: true,
     },
     project: {
       type: "project",
       label: "Default bb project",
       description:
-        "Optional. Used when the panel is not opened from a project, or when several projects have Shortcut config.",
+        "Optional. Used when the panel, CLI command, or native tool has no project context, or when several projects have Shortcut config.",
+    },
+    enableAgentMutations: {
+      type: "boolean",
+      label: "Enable agent mutations",
+      description:
+        "Allow bb plugin commands and native agent tools to create or change Shortcut Stories. Read-only commands and tools remain available when disabled.",
+      default: false,
     },
   });
 
@@ -247,6 +116,278 @@ export default async function plugin(bb: BbPluginApi) {
       "Set the Shortcut API token in Extensions → Plugins → Shortcut Agent.",
     );
   }
+
+  const shortcut = createShortcutService(bb, settings);
+  let mutationsEnabled = initial.enableAgentMutations;
+  settings.onChange((next) => {
+    mutationsEnabled = next.enableAgentMutations;
+  });
+
+  bb.cli.register({
+    name: "shortcut-agent",
+    summary:
+      "Read and coordinate Shortcut Agent Stories using the plugin's server-side token and current bb project scope.",
+    commands: [
+      { name: "context", summary: "Summarize the configured Epic work graph", usage: "bb shortcut-agent context [--epic ID]" },
+      { name: "list", summary: "List every Story in the configured Epic", usage: "bb shortcut-agent list [--epic ID]" },
+      { name: "ready", summary: "List unblocked, unclaimed Ready Stories", usage: "bb shortcut-agent ready [--epic ID]" },
+      { name: "blocked", summary: "List blocked Stories and their blockers", usage: "bb shortcut-agent blocked [--epic ID]" },
+      { name: "show", summary: "Show a Story, description, and recent comments", usage: "bb shortcut-agent show STORY [--all-comments]" },
+      { name: "create", summary: "Create a Story in the configured Epic (mutations must be enabled)", usage: "bb shortcut-agent create --title TITLE --description TEXT [relations]" },
+      { name: "edit", summary: "Edit an existing Story (mutations must be enabled)", usage: "bb shortcut-agent edit STORY [field options]" },
+      { name: "start", summary: "Claim and start a Ready Story (mutations must be enabled)", usage: "bb shortcut-agent start STORY [--agent ID]" },
+      { name: "complete", summary: "Complete an owned Story (mutations must be enabled)", usage: "bb shortcut-agent complete STORY --summary TEXT" },
+      { name: "cancel", summary: "Cancel a Story with a reason (mutations must be enabled)", usage: "bb shortcut-agent cancel STORY --reason TEXT" },
+      { name: "release", summary: "Release an owned Story back to Ready (mutations must be enabled)", usage: "bb shortcut-agent release STORY --reason TEXT" },
+      { name: "handoff", summary: "Record progress and optionally release a Story (mutations must be enabled)", usage: "bb shortcut-agent handoff STORY --summary TEXT [--release]" },
+      { name: "dep", summary: "Add or remove one Story relationship (mutations must be enabled)", usage: "bb shortcut-agent dep add|remove STORY --blocked-by|--blocks|--related-to OTHER" },
+      { name: "claims", summary: "List in-flight or stale claims", usage: "bb shortcut-agent claims [--stale] [--stale-minutes N]" },
+      { name: "config", summary: "Show effective bb project Shortcut Agent configuration", usage: "bb shortcut-agent config" },
+      { name: "doctor", summary: "Check Shortcut connectivity and project configuration", usage: "bb shortcut-agent doctor" },
+    ],
+    async run(argv, context) {
+      const parsed = parseArgv(argv);
+      if (parsed.command === "help" || flag(parsed.options, "help")) {
+        const helpCommand = parsed.command === "help" ? parsed.args[0] : parsed.command;
+        const helpSubcommand = parsed.command === "help" ? parsed.args[1] : parsed.subcommand;
+        const help = helpCommand ? commandHelp(helpCommand, helpSubcommand) : globalHelp(VERSION);
+        if (!help) {
+          return { exitCode: 2, stderr: `Unknown help topic: ${[helpCommand, helpSubcommand].filter(Boolean).join(" ")}\n` };
+        }
+        return {
+          exitCode: 0,
+          stdout: `${help.replaceAll("shortcut-agent", "bb shortcut-agent")}\n\nbb integration: project scope and API origin are server-controlled; init, --config, --api-url, and --description-file are unsupported.\n`,
+        };
+      }
+      if (parsed.command === "version" || flag(parsed.options, "version")) {
+        return { exitCode: 0, stdout: `${VERSION}\n` };
+      }
+      const result = await shortcut.execute(argv, context);
+      const output = flag(parsed.options, "human")
+        ? formatHuman(result.payload)
+        : JSON.stringify(result.payload, null, flag(parsed.options, "pretty") ? 2 : 0);
+      return result.exitCode === 0
+        ? { exitCode: 0, stdout: `${output}\n` }
+        : { exitCode: result.exitCode, stderr: `${output}\n` };
+    },
+  });
+
+  const readToolNames = ["shortcut_agent_context", "shortcut_agent_show"];
+  const mutationToolNames = [
+    "shortcut_agent_create",
+    "shortcut_agent_edit",
+    "shortcut_agent_add_dependency",
+    "shortcut_agent_start",
+    "shortcut_agent_complete",
+    "shortcut_agent_release",
+  ];
+  bb.agents.configure(() => ({
+    tools: mutationsEnabled ? [...readToolNames, ...mutationToolNames] : readToolNames,
+    skills: [],
+  }));
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_context",
+    description: "Summarize ready, active, blocked, and recently completed Stories in the Shortcut Epic configured for the current bb project.",
+    parameters: z.object({ epicId: z.number().int().positive().optional() }).strict(),
+    experimental_statusLabels: { pending: "Loading Shortcut work graph", completed: "Loaded Shortcut work graph" },
+    execute({ epicId }, context) {
+      return shortcut.executeTool(
+        ["context", ...(epicId ? ["--epic", String(epicId)] : [])],
+        context,
+      );
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_show",
+    description: "Read one Shortcut Story, including its full description and recent human or agent-event comments. Always use this before starting work on a Story.",
+    instructions: "Call shortcut_agent_show before shortcut_agent_start so the Story description and handoff context are known.",
+    parameters: z
+      .object({
+        storyId: z.number().int().positive(),
+        allComments: z.boolean().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Reading Shortcut Story", completed: "Read Shortcut Story" },
+    execute({ storyId, allComments }, context) {
+      return shortcut.executeTool(
+        ["show", String(storyId), ...(allComments ? ["--all-comments"] : [])],
+        context,
+      );
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_create",
+    description: "Create an unowned Shortcut Story in the configured Epic's Ready state, with optional dependency links. Requires Enable agent mutations.",
+    parameters: z
+      .object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+        type: z.enum(["bug", "chore", "feature"]).optional(),
+        estimate: z.number().int().positive().optional(),
+        blockedBy: z.array(z.number().int().positive()).optional(),
+        blocks: z.array(z.number().int().positive()).optional(),
+        relatedTo: z.array(z.number().int().positive()).optional(),
+        epicId: z.number().int().positive().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Creating Shortcut Story", completed: "Created Shortcut Story" },
+    execute(input, context) {
+      const argv = ["create", "--title", input.title, "--description", input.description];
+      if (input.type) argv.push("--type", input.type);
+      if (input.estimate) argv.push("--estimate", String(input.estimate));
+      if (input.epicId) argv.push("--epic", String(input.epicId));
+      for (const id of input.blockedBy ?? []) argv.push("--blocked-by", String(id));
+      for (const id of input.blocks ?? []) argv.push("--blocks", String(id));
+      for (const id of input.relatedTo ?? []) argv.push("--related-to", String(id));
+      return shortcut.executeTool(argv, context);
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_edit",
+    description: "Edit fields on an existing Shortcut Story. Lifecycle state changes should use the dedicated start, complete, or release tools. Requires Enable agent mutations.",
+    parameters: z
+      .object({
+        storyId: z.number().int().positive(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        type: z.enum(["bug", "chore", "feature"]).optional(),
+        estimate: z.number().int().positive().optional(),
+        clearEstimate: z.boolean().optional(),
+        moveToEpicId: z.number().int().positive().optional(),
+        teamId: z.string().min(1).optional(),
+        clearTeam: z.boolean().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Editing Shortcut Story", completed: "Edited Shortcut Story" },
+    execute(input, context) {
+      const argv = ["edit", String(input.storyId)];
+      if (input.title !== undefined) argv.push("--title", input.title);
+      if (input.description !== undefined) argv.push("--description", input.description);
+      if (input.type) argv.push("--type", input.type);
+      if (input.estimate) argv.push("--estimate", String(input.estimate));
+      if (input.clearEstimate) argv.push("--clear-estimate");
+      if (input.moveToEpicId) argv.push("--move-to-epic", String(input.moveToEpicId));
+      if (input.teamId) argv.push("--set-team", input.teamId);
+      if (input.clearTeam) argv.push("--clear-team");
+      return shortcut.executeTool(argv, context);
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_add_dependency",
+    description: "Add one blocks, blocked-by, or related-to relationship between Shortcut Stories, preserving the CLI's cycle and cross-Epic safety checks. Requires Enable agent mutations.",
+    parameters: z
+      .object({
+        storyId: z.number().int().positive(),
+        relation: z.enum(["blocked-by", "blocks", "related-to"]),
+        otherStoryId: z.number().int().positive(),
+        allowCrossEpic: z.boolean().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Adding Shortcut dependency", completed: "Added Shortcut dependency" },
+    execute(input, context) {
+      return shortcut.executeTool(
+        [
+          "dep",
+          "add",
+          String(input.storyId),
+          `--${input.relation}`,
+          String(input.otherStoryId),
+          ...(input.allowCrossEpic ? ["--allow-cross-epic"] : []),
+        ],
+        context,
+      );
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_start",
+    description: "Claim an unowned, unblocked Ready Story and move it to Started. The current bb thread is used as agent identity unless agentId is supplied. Requires Enable agent mutations.",
+    parameters: z
+      .object({
+        storyId: z.number().int().positive(),
+        agentId: z.string().min(1).optional(),
+        epicId: z.number().int().positive().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Claiming Shortcut Story", completed: "Claimed Shortcut Story" },
+    execute(input, context) {
+      return shortcut.executeTool(
+        [
+          "start",
+          String(input.storyId),
+          ...(input.agentId ? ["--agent", input.agentId] : []),
+          ...(input.epicId ? ["--epic", String(input.epicId)] : []),
+        ],
+        context,
+      );
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_complete",
+    description: "Record completion evidence and move an owned Started Story to Done. Requires Enable agent mutations.",
+    parameters: z
+      .object({
+        storyId: z.number().int().positive(),
+        summary: z.string().min(1),
+        verification: z.string().min(1).optional(),
+        evidence: z.string().min(1).optional(),
+        changed: z.string().min(1).optional(),
+        remaining: z.string().min(1).optional(),
+        agentId: z.string().min(1).optional(),
+        epicId: z.number().int().positive().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Completing Shortcut Story", completed: "Completed Shortcut Story" },
+    execute(input, context) {
+      const argv = ["complete", String(input.storyId), "--summary", input.summary];
+      for (const [name, value] of [
+        ["verification", input.verification],
+        ["evidence", input.evidence],
+        ["changed", input.changed],
+        ["remaining", input.remaining],
+        ["agent", input.agentId],
+      ] as const) {
+        if (value) argv.push(`--${name}`, value);
+      }
+      if (input.epicId) argv.push("--epic", String(input.epicId));
+      return shortcut.executeTool(argv, context);
+    },
+  });
+
+  bb.agents.registerTool({
+    name: "shortcut_agent_release",
+    description: "Record a reason, clear Story owners, and return a Story to Ready. Use force only to recover a confirmed stale claim. Requires Enable agent mutations.",
+    parameters: z
+      .object({
+        storyId: z.number().int().positive(),
+        reason: z.string().min(1),
+        force: z.boolean().optional(),
+        agentId: z.string().min(1).optional(),
+        epicId: z.number().int().positive().optional(),
+      })
+      .strict(),
+    experimental_statusLabels: { pending: "Releasing Shortcut Story", completed: "Released Shortcut Story" },
+    execute(input, context) {
+      return shortcut.executeTool(
+        [
+          "release",
+          String(input.storyId),
+          "--reason",
+          input.reason,
+          ...(input.force ? ["--force"] : []),
+          ...(input.agentId ? ["--agent", input.agentId] : []),
+          ...(input.epicId ? ["--epic", String(input.epicId)] : []),
+        ],
+        context,
+      );
+    },
+  });
 
   bb.rpc.register(rpcContract, {
     async loadGraph({ projectId, epicId }) {
@@ -269,7 +410,6 @@ export default async function plugin(bb: BbPluginApi) {
         token,
         workspace: configured.config.workspace,
         baseUrl:
-          configured.config.api_url ??
           process.env.SHORTCUT_API_URL ??
           "https://api.app.shortcut.com",
       });
