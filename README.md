@@ -554,6 +554,182 @@ require a Shortcut token or network access.
 - Shortcut is the only work database. The local JSON file contains configuration,
   not synchronized task state.
 
+## Shortcut as an agent backend
+
+Shortcut is the shared source of truth, which is the point of this CLI — but it
+was designed for humans working at human cadence. Nearly every hard part of this
+implementation is *emulation*: readiness, mutual exclusion, lease expiry,
+attribution, cycle safety, and idempotency are all reconstructed client-side
+over plain CRUD. The shortcomings below are the reason those workarounds exist.
+
+**S1 — No conditional writes.** No ETag/`If-Match`, no `If-Unmodified-Since`.
+
+- Every mutation is last-write-wins.
+- `start` can only do read → check → PATCH → re-read, which is TOCTOU by
+  construction (`src/commands.js`).
+- `edit --description` is an unguarded full replace, so two agents appending
+  findings clobber each other *silently* — no exit `4`, no warning.
+
+**S2 — Identity is seat-shaped, not machine-shaped.** No bot or service
+principal; a token authenticates as one member.
+
+- N agents collapse to 1 Shortcut identity unless you buy N seats.
+- Ownership gives mutual exclusion but not attribution.
+- The verification read in `start` cannot distinguish winner from loser: both
+  agents read back the same member as owner and both conclude they won.
+- No per-agent permission scoping, and the shared rate-limit budget cannot be
+  partitioned across the fleet.
+
+**S3 — No lease or TTL primitive.** A claim never expires.
+
+- A crashed agent owns a Story forever.
+- `claims` has to *infer* liveness from comment timestamps against a client-side
+  `--stale-minutes` heuristic.
+- Recovery is a human or orchestrator running `release --force`.
+- "Reserve with a 15-minute lease, renew by heartbeat, auto-release on expiry"
+  has no server-side analogue.
+
+**S4 — Nowhere to put structured agent state.** Custom fields are enum-shaped,
+so ephemeral values (`run_id`, event UUIDs) would permanently pollute workspace
+schema. Comments became the event log instead (`src/comments.js`).
+
+- The log is unqueryable server-side, so `claims` fans out one comment fetch per
+  in-flight Story.
+- Comments are editable and deletable by humans, so the log is not
+  tamper-evident.
+- Versioning is hand-rolled (`EVENT_FORMAT_VERSION`) with no schema validation.
+- Every agent event lands in the human activity feed and notification stream,
+  with no way to mark a comment machine-generated.
+
+**S5 — The dependency graph is second-class.** A fixed verb set and no graph
+queries.
+
+- No server-side cycle detection: `assertNoCycle` pulls every Story in the Epic
+  *and* backfills truncated `story_links` per Story to validate one edge.
+- Cross-Epic cycle safety is impossible to prove and is explicitly unproven.
+- No ready-frontier or topological-order query; `ready` is a full Epic scan
+  filtered in memory.
+- The verb set is a closed enum (`blocks`, `duplicates`, `relates to`) with no
+  extension point: no `discovered-from`, no workspace-defined edge types. Agent
+  provenance has nowhere to live but the description.
+
+**S6 — A `blocks` edge is satisfied only by a Done-type state.** There is no way
+to say "this edge clears when the blocker reaches In Review".
+
+- Human teams park Stories in a review state; agents cannot, because a Story
+  awaiting review still blocks everything downstream. One PR in review stalls
+  the whole fleet.
+- The only workaround is to have agents `complete` a Story when the PR opens.
+  That buys throughput and loses the truth: no review state, wrong cycle-time
+  data, and a rejected PR means reopening a Done Story.
+- Same root cause as the cancellation problem below — edge satisfaction has
+  exactly one predicate, and it is `type == "done"`.
+
+**S7 — Workflow states are configuration, not semantics.**
+
+- `init` guesses meaning from state type plus name regex, pins the resulting
+  numeric IDs into config, and needs a whole `doctor` command to detect drift.
+- There is no state type for "abandoned", so `cancel` must use a Done-type
+  state — which **incorrectly unblocks downstream Stories**. The CLI can only
+  warn; the backend makes it unfixable.
+- Multi-team Epics get `epicTeams[0]` and a warning, because an Epic has no
+  single workflow.
+
+**S8 — No idempotency keys on writes.**
+
+- A non-GET request that fails at the network layer cannot be retried: a
+  retried `createStory` duplicates the Story.
+- Hence the `ambiguous_mutation` error class in `src/client.js` — the CLI's only
+  honest move is to hand the ambiguity to an agent, the worst possible consumer
+  of ambiguity.
+- `external_id` on comments is not server-enforced, so it supports only
+  client-side reconciliation after the fact.
+
+**S9 — Multi-step operations cannot be atomic.**
+
+- Lifecycle commands post a comment then PATCH state: two calls, no transaction.
+- `start` explicitly tolerates a successful claim with a failed claim comment,
+  producing exactly the `unattributed: true` state `claims` reports.
+- Seeding a graph is N Story creates plus M link creates with no rollback.
+
+**S10 — The Epic is the only container, and it is not a namespace.**
+
+- Epics do not nest and carry no permissions.
+- Tasks and Subtasks are not workable units: no workflow state, no owner, no
+  links.
+- An agent that discovers work needing its own subgraph must flatten it into the
+  parent Epic or spawn a sibling Epic and forfeit cycle safety.
+
+**S11 — The query surface forces full scans and N+1s.**
+
+- There is no "unowned, unblocked, unstarted, in Epic X" query, so every command
+  fetches all Epic Stories plus all workflow states.
+- `blocked` fetches one Story per blocker; `claims` fetches comments per
+  in-flight Story; `dep add` fetches the whole Epic.
+- Combined with a fleet-shared rate limit and poll-only discovery, throughput is
+  bounded by request budget rather than by available work.
+
+**S12 — `position` is being used as priority.** It is a UI drag-order field: no
+atomic reorder, no priority semantics. Adequate for deterministic ordering,
+wrong as a scheduler input.
+
+## Suggested Shortcut changes
+
+Ordered by leverage. Most build on entities Shortcut already has.
+
+1. **Free-text and JSON custom field types** *(S4, S3, S12)* — the single
+   highest-leverage change. Enum-only custom fields are what pushed agent state
+   into comments. A JSON-valued field per Story would hold `agent_id`,
+   `run_id`, `lease_expires_at`, and priority as queryable data instead of
+   Markdown that has to be regex-parsed back out.
+2. **`If-Match` / `If-Unmodified-Since` on `PATCH /stories`** *(S1, S2)* — plain
+   HTTP conditional requests, as GitHub and Stripe already expose. This alone
+   turns `start` from best-effort into a real compare-and-swap and makes
+   description appends safe. Return `412` and the CLI's existing exit `4` path
+   handles it.
+3. **`Idempotency-Key` request header** *(S8, S9)* — the Stripe pattern.
+   Replaying a key returns the original response, so `ambiguous_mutation` stops
+   being unrecoverable and `create`/`comment` become safely retryable.
+4. **A per-edge or per-workflow "unblocks at" threshold** *(S6)* — let a
+   `blocks` edge clear when the blocking Story reaches a nominated state rather
+   than only a Done-type one. Workflow states already carry an ordered
+   `position`, so "satisfied at *In Review* or later" needs no new concept, just
+   a setting. This is what forces agents to falsely complete Stories at PR-open
+   time today, and it is the difference between a fleet that stalls on review
+   and one that does not.
+5. **A `cancelled` workflow state type** *(S7)* — distinct from `done`, and
+   explicitly *not* satisfying `blocks` edges. Today cancelling a Story falsely
+   unblocks its dependents. Together with (4) this makes edge satisfaction a
+   real predicate instead of one hardcoded type check. Correctness fix, not a
+   convenience.
+6. **Server-side readiness and cycle checks on the Epic** *(S5, S11)* — e.g.
+   `GET /epics/{id}/stories?ready=true` returning the unowned, unblocked,
+   not-archived frontier, and rejecting a `story-links` POST that would create a
+   cycle. Beads treats ready-work as a first-class query (`bd ready`) rather
+   than something each client recomputes; both of these are already computed
+   client-side here, just expensively.
+7. **A bot/service member type** *(S2)* — a non-billable identity with a scoped
+   token, so a fleet gets per-agent ownership, attribution, permissions, and
+   rate-limit budget. Shortcut already models members and tokens; this is a new
+   member *kind*, not a new concept.
+8. **Machine-visibility flag on comments** *(S4)* — one boolean that suppresses
+   notifications and lets the UI collapse agent chatter, so an event log in
+   comments stops being notification spam for human watchers.
+9. **An extensible `story-link` verb set** *(S5)* — `blocks`, `duplicates`, and
+   `relates to` already exist; the gap is that the enum is closed. Adding
+   `discovered-from` would cover the common agent case: Beads carries discovery
+   provenance as an edge type, which is how an agent records "this work came out
+   of that work" without polluting descriptions.
+10. **Transactional graph seeding** *(S9)* — extend bulk story creation to
+    accept inter-Story links within one payload, applied atomically. Removes the
+    half-built-graph failure mode from `plan apply`.
+11. **Server-side lease expiry** *(S3)* — the one item with no existing Shortcut
+    pattern to build on, and it may not belong in a product built for humans.
+    If (1) lands, a `lease_expires_at` JSON field plus a filterable query gets
+    most of the value with no new primitive; true auto-release is the
+    SQS-visibility-timeout model, and Beads gets it for free from owning its own
+    database.
+
 ## Near-term roadmap
 
 - `plan apply` for validating and bulk-creating a JSON/YAML Story DAG
