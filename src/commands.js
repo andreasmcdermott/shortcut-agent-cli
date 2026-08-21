@@ -487,6 +487,14 @@ async function createCommand(parsed, { client, config, stdin }) {
       object_story_id: id,
       verb: "blocks",
     })),
+    ...storyIds(parsed.options, "duplicates").map((id) => ({
+      object_story_id: id,
+      verb: "duplicates",
+    })),
+    ...storyIds(parsed.options, "duplicated-by").map((id) => ({
+      subject_story_id: id,
+      verb: "duplicates",
+    })),
     ...storyIds(parsed.options, "related-to").map((id) => ({
       object_story_id: id,
       verb: "relates to",
@@ -810,6 +818,18 @@ function dependencySpec(parsed, storyId) {
       verb: "blocks",
       relation: "blocks",
     })),
+    ...storyIds(parsed.options, "duplicates").map((target) => ({
+      subjectId: storyId,
+      objectId: target,
+      verb: "duplicates",
+      relation: "duplicates",
+    })),
+    ...storyIds(parsed.options, "duplicated-by").map((target) => ({
+      subjectId: target,
+      objectId: storyId,
+      verb: "duplicates",
+      relation: "duplicated-by",
+    })),
     ...storyIds(parsed.options, "related-to").map((target) => ({
       subjectId: storyId,
       objectId: target,
@@ -819,7 +839,7 @@ function dependencySpec(parsed, storyId) {
   ];
   if (entries.length !== 1) {
     throw argumentError(
-      "dep requires exactly one --blocked-by, --blocks, or --related-to Story ID",
+      "dep requires exactly one --blocked-by, --blocks, --duplicates, --duplicated-by, or --related-to Story ID",
     );
   }
   return entries[0];

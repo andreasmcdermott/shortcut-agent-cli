@@ -145,6 +145,17 @@ async function mockShortcut() {
       }
       return send({ entity: link }, 201);
     }
+    const linkMatch = url.pathname.match(/^\/api\/v4\/acme\/story-links\/(\d+)$/);
+    if (linkMatch && request.method === "DELETE") {
+      const id = Number(linkMatch[1]);
+      for (const story of stories.values()) {
+        story.story_links.entities = story.story_links.entities.filter(
+          (link) => Number(link.id) !== id,
+        );
+      }
+      response.statusCode = 204;
+      return response.end();
+    }
     const storyMatch = url.pathname.match(/^\/api\/v4\/acme\/stories\/(\d+)$/);
     if (storyMatch) {
       const id = Number(storyMatch[1]);
@@ -237,6 +248,10 @@ test("create sends natural dependency directions", async (t) => {
       "1",
       "--blocks",
       "3",
+      "--duplicates",
+      "2",
+      "--duplicated-by",
+      "3",
     ],
     setup,
   );
@@ -248,6 +263,8 @@ test("create sends natural dependency directions", async (t) => {
   assert.deepEqual(request.body.story_links, [
     { subject_story_id: 1, verb: "blocks" },
     { object_story_id: 3, verb: "blocks" },
+    { object_story_id: 2, verb: "duplicates" },
+    { subject_story_id: 3, verb: "duplicates" },
   ]);
 });
 
@@ -600,6 +617,52 @@ test("dependency addition is directional and idempotent", async (t) => {
       method === "POST" && pathname === "/api/v4/acme/story-links",
   );
   assert.equal(creates.length, 1);
+});
+
+test("duplicate links are directional and skip the blocking-graph load", async (t) => {
+  const setup = await fixture(t);
+  const forward = await invoke(["dep", "add", "1", "--duplicates", "3"], setup);
+  assert.equal(forward.exitCode, 0, forward.stderr);
+  assert.deepEqual(forward.json.link, {
+    id: forward.json.link.id,
+    subjectId: 1,
+    objectId: 3,
+    verb: "duplicates",
+  });
+  const reverse = await invoke(["dep", "add", "1", "--duplicated-by", "2"], setup);
+  assert.equal(reverse.exitCode, 0, reverse.stderr);
+  assert.equal(reverse.json.link.subjectId, 2);
+  assert.equal(reverse.json.link.objectId, 1);
+  assert.equal(reverse.json.link.verb, "duplicates");
+  assert.equal(
+    setup.mock.requests.some(({ path: pathname }) =>
+      pathname.endsWith("/epics/99/stories"),
+    ),
+    false,
+    "a duplicates edge must not trigger cycle detection",
+  );
+});
+
+test("dep remove deletes a duplicate link in either direction", async (t) => {
+  const setup = await fixture(t);
+  const added = await invoke(["dep", "add", "1", "--duplicates", "3"], setup);
+  assert.equal(added.exitCode, 0, added.stderr);
+  const removed = await invoke(["dep", "remove", "3", "--duplicated-by", "1"], setup);
+  assert.equal(removed.exitCode, 0, removed.stderr);
+  assert.deepEqual(removed.json.removed_link_ids, [added.json.link.id]);
+  assert.deepEqual(setup.mock.stories.get(1).story_links.entities, []);
+});
+
+test("dep rejects more than one relation flag", async (t) => {
+  const setup = await fixture(t);
+  const result = await invoke(
+    ["dep", "add", "1", "--duplicates", "3", "--blocks", "2"],
+    setup,
+  );
+  assert.equal(result.exitCode, 2);
+  const error = JSON.parse(result.stderr).error;
+  assert.equal(error.code, "invalid_arguments");
+  assert.match(error.message, /--duplicates/);
 });
 
 test("a bare --epic is rejected instead of silently targeting Epic 1", async (t) => {

@@ -75,6 +75,16 @@ export function summarizeStory(story, statesById, { includeDescription = false }
     blocks: links
       .filter((link) => link.verb === "blocks" && link.subjectId === Number(story.id))
       .map((link) => link.objectId),
+    duplicates: links
+      .filter(
+        (link) => link.verb === "duplicates" && link.subjectId === Number(story.id),
+      )
+      .map((link) => link.objectId),
+    duplicated_by: links
+      .filter(
+        (link) => link.verb === "duplicates" && link.objectId === Number(story.id),
+      )
+      .map((link) => link.subjectId),
     related_to: links
       .filter((link) => link.verb === "relates to")
       .map((link) =>

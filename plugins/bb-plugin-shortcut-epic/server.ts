@@ -140,7 +140,7 @@ export default async function plugin(bb: BbPluginApi) {
       { name: "cancel", summary: "Cancel a Story with a reason (mutations must be enabled)", usage: "bb shortcut-agent cancel STORY --reason TEXT" },
       { name: "release", summary: "Release an owned Story back to Ready (mutations must be enabled)", usage: "bb shortcut-agent release STORY --reason TEXT" },
       { name: "handoff", summary: "Record progress and optionally release a Story (mutations must be enabled)", usage: "bb shortcut-agent handoff STORY --summary TEXT [--release]" },
-      { name: "dep", summary: "Add or remove one Story relationship (mutations must be enabled)", usage: "bb shortcut-agent dep add|remove STORY --blocked-by|--blocks|--related-to OTHER" },
+      { name: "dep", summary: "Add or remove one Story relationship (mutations must be enabled)", usage: "bb shortcut-agent dep add|remove STORY --blocked-by|--blocks|--duplicates|--duplicated-by|--related-to OTHER" },
       { name: "claims", summary: "List in-flight or stale claims", usage: "bb shortcut-agent claims [--stale] [--stale-minutes N]" },
       { name: "config", summary: "Show effective bb project Shortcut Agent configuration", usage: "bb shortcut-agent config" },
       { name: "doctor", summary: "Check Shortcut connectivity and project configuration", usage: "bb shortcut-agent doctor" },
@@ -229,6 +229,8 @@ export default async function plugin(bb: BbPluginApi) {
         estimate: z.number().int().positive().optional(),
         blockedBy: z.array(z.number().int().positive()).optional(),
         blocks: z.array(z.number().int().positive()).optional(),
+        duplicates: z.array(z.number().int().positive()).optional(),
+        duplicatedBy: z.array(z.number().int().positive()).optional(),
         relatedTo: z.array(z.number().int().positive()).optional(),
         epicId: z.number().int().positive().optional(),
       })
@@ -241,6 +243,8 @@ export default async function plugin(bb: BbPluginApi) {
       if (input.epicId) argv.push("--epic", String(input.epicId));
       for (const id of input.blockedBy ?? []) argv.push("--blocked-by", String(id));
       for (const id of input.blocks ?? []) argv.push("--blocks", String(id));
+      for (const id of input.duplicates ?? []) argv.push("--duplicates", String(id));
+      for (const id of input.duplicatedBy ?? []) argv.push("--duplicated-by", String(id));
       for (const id of input.relatedTo ?? []) argv.push("--related-to", String(id));
       return shortcut.executeTool(argv, context);
     },
@@ -279,11 +283,11 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.agents.registerTool({
     name: "shortcut_agent_add_dependency",
-    description: "Add one blocks, blocked-by, or related-to relationship between Shortcut Stories, preserving the CLI's cycle and cross-Epic safety checks. Requires Enable agent mutations.",
+    description: "Add one blocks, blocked-by, duplicates, duplicated-by, or related-to relationship between Shortcut Stories, preserving the CLI's cycle and cross-Epic safety checks. Requires Enable agent mutations.",
     parameters: z
       .object({
         storyId: z.number().int().positive(),
-        relation: z.enum(["blocked-by", "blocks", "related-to"]),
+        relation: z.enum(["blocked-by", "blocks", "duplicates", "duplicated-by", "related-to"]),
         otherStoryId: z.number().int().positive(),
         allowCrossEpic: z.boolean().optional(),
       })
