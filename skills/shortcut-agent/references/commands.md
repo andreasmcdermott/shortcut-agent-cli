@@ -166,6 +166,8 @@ configured team applied.
 | `--estimate N` | Positive integer |
 | `--blocked-by ID` | Repeatable and comma-separated |
 | `--blocks ID` | Repeatable and comma-separated |
+| `--duplicates ID` | Repeatable and comma-separated |
+| `--duplicated-by ID` | Repeatable and comma-separated |
 | `--related-to ID` | Repeatable and comma-separated |
 
 ### `edit STORY <field...>`
@@ -237,9 +239,12 @@ Returns `event`, `comment_id`, `released`, `story`.
 
 ### `dep add|remove STORY <one relation>`
 
-**Exactly one** of `--blocked-by ID`, `--blocks ID`, `--related-to ID` per
-invocation. Multiple or comma-separated values are an argument error — this is
-the opposite of `create`.
+**Exactly one** of `--blocked-by ID`, `--blocks ID`, `--duplicates ID`,
+`--duplicated-by ID`, `--related-to ID` per invocation. Multiple or
+comma-separated values are an argument error — this is the opposite of `create`.
+
+Shortcut has three link verbs: `blocks`, `duplicates`, and `relates to`. Only
+`blocks` affects readiness and cycle safety; the other two are context only.
 
 `dep add`:
 - Cross-Epic edges require `--allow-cross-epic` and return a warning that cycle

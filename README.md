@@ -312,7 +312,8 @@ shortcut-agent create \
   --description-file ./story.md \
   --blocked-by 41 \
   --blocks 72 \
-  --related-to 19
+  --related-to 19 \
+  --duplicates 88
 
 printf 'Implement the agreed cache key design.' | \
   shortcut-agent create --title 'Implement cache keys' --description-file -
@@ -322,7 +323,12 @@ Dependency flags can be repeated or comma-separated. Their direction is natural:
 
 - `--blocked-by 41`: Story 41 blocks the new Story.
 - `--blocks 72`: the new Story blocks Story 72.
+- `--duplicates 88`: the new Story duplicates Story 88.
+- `--duplicated-by 88`: Story 88 duplicates the new Story.
 - `--related-to 19`: a non-blocking relation.
+
+Only `blocks` edges affect readiness. `duplicates` and `relates to` are recorded
+for context and reported in Story summaries.
 
 The default Shortcut Story type is `chore`; use `--type bug|chore|feature` to
 override it.
@@ -412,6 +418,8 @@ shortcut-agent edit 456 --set-team b2c34c3a-1111-2222-3333-0123456789ab
 
 shortcut-agent dep add 456 --blocked-by 41
 shortcut-agent dep add 456 --blocks 72
+shortcut-agent dep add 456 --duplicates 88
+shortcut-agent dep add 456 --duplicated-by 88
 shortcut-agent dep add 456 --related-to 19
 shortcut-agent dep remove 456 --blocked-by 41
 ```

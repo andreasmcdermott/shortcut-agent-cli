@@ -51,6 +51,22 @@ test("normalizes dependency direction", () => {
   assert.deepEqual(summary.blocks, [3]);
 });
 
+test("normalizes duplicate direction independently of blocking", () => {
+  const value = story(2, 1, {
+    story_links: {
+      entities: [
+        { id: 10, subject: { id: 2 }, object: { id: 5 }, verb: "duplicates" },
+        { id: 11, subject: { id: 7 }, object: { id: 2 }, verb: "duplicates" },
+      ],
+    },
+  });
+  const summary = summarizeStory(value, states);
+  assert.deepEqual(summary.duplicates, [5]);
+  assert.deepEqual(summary.duplicated_by, [7]);
+  assert.deepEqual(summary.blocked_by, []);
+  assert.deepEqual(summary.blocks, []);
+});
+
 test("classifies blocked before otherwise ready", () => {
   const groups = classifyStories(
     [story(1, 1), story(2, 2), story(3, 3), story(4, 1, { blocked: true })],
