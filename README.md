@@ -652,13 +652,25 @@ to say "this edge clears when the blocker reaches In Review".
   producing exactly the `unattributed: true` state `claims` reports.
 - Seeding a graph is N Story creates plus M link creates with no rollback.
 
-**S10 — The Epic is the only container, and it is not a namespace.**
+**S10 — The Epic is the only container this CLI scopes to, and it is not a
+namespace.** The weakest item on this list — see the correction below.
 
-- Epics do not nest and carry no permissions.
-- Tasks and Subtasks are not workable units: no workflow state, no owner, no
-  links.
-- An agent that discovers work needing its own subgraph must flatten it into the
-  parent Epic or spawn a sibling Epic and forfeit cycle safety.
+- Epics do not nest and carry no permissions or workflow of their own, so the
+  unit of agent scope is also the unit of human planning.
+- Checklist **Tasks** are not workable units: description, `isCompleted`, and
+  owners only. No state, no links, nothing to claim.
+- An agent that discovers work needing its own subgraph therefore flattens it
+  into the parent Epic, or spawns a sibling Epic and forfeits cycle safety (S5).
+
+*Sub-tasks largely solve this, and this CLI ignores them.* A Shortcut **sub-task
+is a full Story** with a parent pointer — its own workflow state, owners, and
+story links; detaching one turns it back into an ordinary Story. Hierarchical
+decomposition inside a single Epic is available today, with every level
+independently claimable. `shortcut-agent` models only `story_links` and never
+the parent/child relation, so the flattening above is mostly self-inflicted.
+Two things to confirm before leaning on it: how deep sub-tasks may nest, and
+whether an incomplete sub-task marks its parent `blocked`. If it does not, a
+parent Story can be handed to an agent while its children are still open.
 
 **S11 — The query surface forces full scans and N+1s.**
 
@@ -732,6 +744,8 @@ Ordered by leverage. Most build on entities Shortcut already has.
 
 ## Near-term roadmap
 
+- sub-task support, so a discovered subgraph can nest under its parent Story
+  instead of flattening into the Epic (see S10)
 - `plan apply` for validating and bulk-creating a JSON/YAML Story DAG
 - optional explicitly managed `Active Agent` custom field
 - richer graph output (adjacency JSON, Mermaid, and DOT)
