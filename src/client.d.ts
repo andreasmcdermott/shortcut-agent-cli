@@ -40,6 +40,13 @@ export interface ShortcutEpic {
   name?: string;
   description?: string;
   app_url?: string;
+  archived?: boolean;
+  completed?: boolean;
+  updated_at?: string;
+  owners?: {
+    entities?: Array<{ id: string; name?: string }>;
+  };
+  owner_ids?: string[];
   [key: string]: unknown;
 }
 
@@ -51,8 +58,21 @@ export interface ShortcutClientOptions {
   signal?: AbortSignal;
 }
 
+export function unwrapEntity(payload: unknown): unknown;
+export function unwrapEntities(payload: unknown): unknown[];
+
 export class ShortcutClient {
   constructor(options: ShortcutClientOptions);
+  request(
+    method: string,
+    pathname: string,
+    options?: { query?: Record<string, unknown>; body?: unknown },
+  ): Promise<unknown>;
+  whoami(): Promise<{
+    id?: string;
+    member?: { id?: string };
+    [key: string]: unknown;
+  }>;
   listWorkflowStates(): Promise<ShortcutWorkflowState[]>;
   getEpic(id: number | string): Promise<ShortcutEpic>;
   listEpicStories(epicId: number | string, options?: { fields?: string }): Promise<ShortcutStory[]>;

@@ -6244,32 +6244,62 @@ function forgetEpic(projectId) {
 function EpicPicker({
   value,
   loading,
+  ownedEpics,
+  ownedEpicsLoading,
+  ownedEpicsError,
+  selectedEpicId: selectedEpicId2,
   canUseDefault,
   selectionError,
   onChange,
+  onSelectOwned,
   onSubmit,
   onUseDefault
 }) {
-  return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("form", { className: "flex items-center gap-2", onSubmit, children: [
-      /* @__PURE__ */ jsx("label", { htmlFor: "shortcut-agent-epic-id", className: "text-xs text-muted-foreground", children: "Epic ID" }),
-      /* @__PURE__ */ jsx(
-        "input",
+  const selectedOwnedEpic = ownedEpics.some((epic) => epic.id === selectedEpicId2) ? String(selectedEpicId2) : "";
+  return /* @__PURE__ */ jsxs("div", { className: "space-y-1.5", children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsx("label", { htmlFor: "shortcut-agent-owned-epic", className: "text-xs text-muted-foreground", children: "Owned Epic" }),
+      /* @__PURE__ */ jsxs(
+        "select",
         {
-          id: "shortcut-agent-epic-id",
-          className: "h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          type: "number",
-          min: "1",
-          step: "1",
-          required: true,
-          value,
-          onChange: (event) => onChange(event.target.value)
+          id: "shortcut-agent-owned-epic",
+          className: "h-8 min-w-56 max-w-80 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          value: selectedOwnedEpic,
+          disabled: ownedEpicsLoading || ownedEpics.length === 0,
+          onChange: (event) => onSelectOwned(event.target.value),
+          children: [
+            /* @__PURE__ */ jsx("option", { value: "", children: ownedEpicsLoading ? "Loading owned Epics\u2026" : ownedEpics.length === 0 ? "No active owned Epics" : "Choose an active Epic\u2026" }),
+            ownedEpics.map((epic) => /* @__PURE__ */ jsxs("option", { value: epic.id, children: [
+              epic.name,
+              " (epic-",
+              epic.id,
+              ")"
+            ] }, epic.id))
+          ]
         }
       ),
-      /* @__PURE__ */ jsx(Button, { type: "submit", size: "sm", variant: "outline", disabled: loading, children: "Load" }),
-      canUseDefault ? /* @__PURE__ */ jsx(Button, { type: "button", size: "sm", variant: "ghost", onClick: onUseDefault, children: "Use default" }) : null
+      /* @__PURE__ */ jsx("span", { className: "text-xs text-muted-foreground", children: "or" }),
+      /* @__PURE__ */ jsxs("form", { className: "flex items-center gap-2", onSubmit, children: [
+        /* @__PURE__ */ jsx("label", { htmlFor: "shortcut-agent-epic-id", className: "text-xs text-muted-foreground", children: "Epic ID" }),
+        /* @__PURE__ */ jsx(
+          "input",
+          {
+            id: "shortcut-agent-epic-id",
+            className: "h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            type: "number",
+            min: "1",
+            step: "1",
+            required: true,
+            value,
+            onChange: (event) => onChange(event.target.value)
+          }
+        ),
+        /* @__PURE__ */ jsx(Button, { type: "submit", size: "sm", variant: "outline", disabled: loading, children: "Load" }),
+        canUseDefault ? /* @__PURE__ */ jsx(Button, { type: "button", size: "sm", variant: "ghost", onClick: onUseDefault, children: "Use default" }) : null
+      ] })
     ] }),
-    selectionError ? /* @__PURE__ */ jsx("div", { className: "mt-1 text-xs text-destructive", children: selectionError }) : null
+    ownedEpicsError ? /* @__PURE__ */ jsx("div", { className: "text-xs text-muted-foreground", children: "Could not load owned Epics. Enter an Epic ID manually." }) : null,
+    selectionError ? /* @__PURE__ */ jsx("div", { className: "text-xs text-destructive", children: selectionError }) : null
   ] });
 }
 function EpicGraph({ subPath }) {
@@ -6285,6 +6315,9 @@ function EpicGraph({ subPath }) {
     () => requestedEpicId === null ? "" : String(requestedEpicId)
   );
   const [selectionError, setSelectionError] = useState(null);
+  const [ownedEpics, setOwnedEpics] = useState([]);
+  const [ownedEpicsLoading, setOwnedEpicsLoading] = useState(true);
+  const [ownedEpicsError, setOwnedEpicsError] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -6309,6 +6342,19 @@ function EpicGraph({ subPath }) {
       setLoading(false);
     }
   }, [projectId, requestedEpicId, rpc]);
+  const loadOwnedEpics = useCallback(async () => {
+    setOwnedEpicsLoading(true);
+    try {
+      const result = await rpc.call("listOwnedEpics", { projectId });
+      setOwnedEpics(result.epics);
+      setOwnedEpicsError(null);
+    } catch (cause) {
+      setOwnedEpics([]);
+      setOwnedEpicsError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOwnedEpicsLoading(false);
+    }
+  }, [projectId, rpc]);
   const startWork = useCallback(
     async (storyId, epicId) => {
       setStartingStoryId(storyId);
@@ -6341,6 +6387,9 @@ function EpicGraph({ subPath }) {
     const timer = window.setInterval(() => void load(), 6e4);
     return () => window.clearInterval(timer);
   }, [load]);
+  useEffect(() => {
+    void loadOwnedEpics();
+  }, [loadOwnedEpics]);
   const chooseEpic = (event) => {
     event.preventDefault();
     const id = Number(epicInput);
@@ -6349,6 +6398,14 @@ function EpicGraph({ subPath }) {
       return;
     }
     setSelectionError(null);
+    rememberEpic(projectId, id);
+    navigate.toPluginPanel("epic", { subPath: String(id) });
+  };
+  const chooseOwnedEpic = (value) => {
+    const id = selectedEpicId(value);
+    if (id === null) return;
+    setSelectionError(null);
+    setEpicInput(String(id));
     rememberEpic(projectId, id);
     navigate.toPluginPanel("epic", { subPath: String(id) });
   };
@@ -6363,9 +6420,14 @@ function EpicGraph({ subPath }) {
     {
       value: epicInput,
       loading,
+      ownedEpics,
+      ownedEpicsLoading,
+      ownedEpicsError,
+      selectedEpicId: data?.epic.id ?? requestedEpicId,
       canUseDefault: requestedEpicId !== null,
       selectionError,
       onChange: setEpicInput,
+      onSelectOwned: chooseOwnedEpic,
       onSubmit: chooseEpic,
       onUseDefault: useDefaultEpic
     }

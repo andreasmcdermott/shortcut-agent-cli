@@ -1,7 +1,11 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { parseArgv, flag } from "../../src/args.js";
-import { ShortcutClient } from "../../src/client.js";
+import {
+  ShortcutClient,
+  unwrapEntities,
+  unwrapEntity,
+} from "../../src/client.js";
 import { commandHelp, globalHelp } from "../../src/help.js";
 import { formatHuman, VERSION } from "../../src/main.js";
 import {
@@ -64,7 +68,27 @@ const graphResponseSchema = z.object({
 
 export type GraphResponse = z.infer<typeof graphResponseSchema>;
 
+const ownedEpicSchema = z
+  .object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    url: z.string().nullable(),
+  })
+  .strict();
+
+const ownedEpicsResponseSchema = z
+  .object({
+    epics: z.array(ownedEpicSchema),
+  })
+  .strict();
+
+export type OwnedEpic = z.infer<typeof ownedEpicSchema>;
+
 export const rpcContract = defineRpcContract({
+  listOwnedEpics: {
+    input: z.object({ projectId: z.string().nullable() }).strict(),
+    output: ownedEpicsResponseSchema,
+  },
   loadGraph: {
     input: z
       .object({
@@ -476,6 +500,67 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.rpc.register(rpcContract, {
+    async listOwnedEpics({ projectId }) {
+      const current = await settings.get();
+      const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
+      if (!token) {
+        throw new Error(
+          "Shortcut API token is not configured. Set it in Extensions → Plugins → Shortcut Agent.",
+        );
+      }
+
+      const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const client = new ShortcutClient({
+        token,
+        workspace: configured.config.workspace,
+        baseUrl:
+          process.env.SHORTCUT_API_URL ??
+          "https://api.app.shortcut.com",
+      });
+      const [identityPayload, epicsPayload] = await Promise.all([
+        client.request("GET", "/api/v3/member"),
+        client.request("GET", "/api/v3/epics", {
+          query: { includes_description: false },
+        }),
+      ]);
+      const identity = unwrapEntity(identityPayload) as { id?: unknown };
+      const epics = unwrapEntities(epicsPayload) as Array<{
+        id: number | string;
+        name?: string;
+        app_url?: string;
+        archived?: boolean;
+        completed?: boolean;
+        owner_ids?: Array<number | string>;
+        owners?: { entities?: Array<{ id: number | string }> };
+      }>;
+      const memberId = String(identity?.id ?? "");
+      if (!memberId) {
+        throw new Error("Shortcut did not identify the current member.");
+      }
+
+      const owned = epics
+        .filter((epic) => {
+          const ownerIds = epic.owner_ids ?? [];
+          const owners = epic.owners?.entities ?? [];
+          return (
+            !epic.archived &&
+            !epic.completed &&
+            (ownerIds.some((ownerId) => String(ownerId) === memberId) ||
+              owners.some((owner) => String(owner.id) === memberId))
+          );
+        })
+        .map((epic) => ({
+          id: Number(epic.id),
+          name: epic.name ?? `Epic ${epic.id}`,
+          url: epic.app_url ?? null,
+        }))
+        .filter((epic) => Number.isSafeInteger(epic.id) && epic.id > 0)
+        .sort((left, right) =>
+          left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+        );
+
+      return { epics: owned };
+    },
     async loadGraph({ projectId, epicId }) {
       const current = await settings.get();
       const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;

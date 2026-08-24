@@ -12,7 +12,7 @@ import {
   useBbNavigate,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
-import type { GraphResponse, rpcContract } from "./server";
+import type { GraphResponse, OwnedEpic, rpcContract } from "./server";
 import { layoutGraph, type GraphNode, type NodeStatus } from "./graph.js";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -233,47 +233,92 @@ function forgetEpic(projectId: string | null) {
 function EpicPicker({
   value,
   loading,
+  ownedEpics,
+  ownedEpicsLoading,
+  ownedEpicsError,
+  selectedEpicId,
   canUseDefault,
   selectionError,
   onChange,
+  onSelectOwned,
   onSubmit,
   onUseDefault,
 }: {
   value: string;
   loading: boolean;
+  ownedEpics: OwnedEpic[];
+  ownedEpicsLoading: boolean;
+  ownedEpicsError: string | null;
+  selectedEpicId: number | null;
   canUseDefault: boolean;
   selectionError: string | null;
   onChange: (value: string) => void;
+  onSelectOwned: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUseDefault: () => void;
 }) {
+  const selectedOwnedEpic = ownedEpics.some((epic) => epic.id === selectedEpicId)
+    ? String(selectedEpicId)
+    : "";
+
   return (
-    <div>
-      <form className="flex items-center gap-2" onSubmit={onSubmit}>
-        <label htmlFor="shortcut-agent-epic-id" className="text-xs text-muted-foreground">
-          Epic ID
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="shortcut-agent-owned-epic" className="text-xs text-muted-foreground">
+          Owned Epic
         </label>
-        <input
-          id="shortcut-agent-epic-id"
-          className="h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          type="number"
-          min="1"
-          step="1"
-          required
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <Button type="submit" size="sm" variant="outline" disabled={loading}>
-          Load
-        </Button>
-        {canUseDefault ? (
-          <Button type="button" size="sm" variant="ghost" onClick={onUseDefault}>
-            Use default
+        <select
+          id="shortcut-agent-owned-epic"
+          className="h-8 min-w-56 max-w-80 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          value={selectedOwnedEpic}
+          disabled={ownedEpicsLoading || ownedEpics.length === 0}
+          onChange={(event) => onSelectOwned(event.target.value)}
+        >
+          <option value="">
+            {ownedEpicsLoading
+              ? "Loading owned Epics…"
+              : ownedEpics.length === 0
+                ? "No active owned Epics"
+                : "Choose an active Epic…"}
+          </option>
+          {ownedEpics.map((epic) => (
+            <option key={epic.id} value={epic.id}>
+              {epic.name} (epic-{epic.id})
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-muted-foreground">or</span>
+        <form className="flex items-center gap-2" onSubmit={onSubmit}>
+          <label htmlFor="shortcut-agent-epic-id" className="text-xs text-muted-foreground">
+            Epic ID
+          </label>
+          <input
+            id="shortcut-agent-epic-id"
+            className="h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="number"
+            min="1"
+            step="1"
+            required
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <Button type="submit" size="sm" variant="outline" disabled={loading}>
+            Load
           </Button>
-        ) : null}
-      </form>
+          {canUseDefault ? (
+            <Button type="button" size="sm" variant="ghost" onClick={onUseDefault}>
+              Use default
+            </Button>
+          ) : null}
+        </form>
+      </div>
+      {ownedEpicsError ? (
+        <div className="text-xs text-muted-foreground">
+          Could not load owned Epics. Enter an Epic ID manually.
+        </div>
+      ) : null}
       {selectionError ? (
-        <div className="mt-1 text-xs text-destructive">{selectionError}</div>
+        <div className="text-xs text-destructive">{selectionError}</div>
       ) : null}
     </div>
   );
@@ -292,6 +337,9 @@ function EpicGraph({ subPath }: { subPath: string }) {
     requestedEpicId === null ? "" : String(requestedEpicId),
   );
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [ownedEpics, setOwnedEpics] = useState<OwnedEpic[]>([]);
+  const [ownedEpicsLoading, setOwnedEpicsLoading] = useState(true);
+  const [ownedEpicsError, setOwnedEpicsError] = useState<string | null>(null);
   const [data, setData] = useState<GraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -317,6 +365,20 @@ function EpicGraph({ subPath }: { subPath: string }) {
       setLoading(false);
     }
   }, [projectId, requestedEpicId, rpc]);
+
+  const loadOwnedEpics = useCallback(async () => {
+    setOwnedEpicsLoading(true);
+    try {
+      const result = await rpc.call("listOwnedEpics", { projectId });
+      setOwnedEpics(result.epics);
+      setOwnedEpicsError(null);
+    } catch (cause) {
+      setOwnedEpics([]);
+      setOwnedEpicsError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setOwnedEpicsLoading(false);
+    }
+  }, [projectId, rpc]);
 
   const startWork = useCallback(
     async (storyId: number, epicId: number) => {
@@ -353,6 +415,10 @@ function EpicGraph({ subPath }: { subPath: string }) {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    void loadOwnedEpics();
+  }, [loadOwnedEpics]);
+
   const chooseEpic = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const id = Number(epicInput);
@@ -361,6 +427,15 @@ function EpicGraph({ subPath }: { subPath: string }) {
       return;
     }
     setSelectionError(null);
+    rememberEpic(projectId, id);
+    navigate.toPluginPanel("epic", { subPath: String(id) });
+  };
+
+  const chooseOwnedEpic = (value: string) => {
+    const id = selectedEpicId(value);
+    if (id === null) return;
+    setSelectionError(null);
+    setEpicInput(String(id));
     rememberEpic(projectId, id);
     navigate.toPluginPanel("epic", { subPath: String(id) });
   };
@@ -376,9 +451,14 @@ function EpicGraph({ subPath }: { subPath: string }) {
     <EpicPicker
       value={epicInput}
       loading={loading}
+      ownedEpics={ownedEpics}
+      ownedEpicsLoading={ownedEpicsLoading}
+      ownedEpicsError={ownedEpicsError}
+      selectedEpicId={data?.epic.id ?? requestedEpicId}
       canUseDefault={requestedEpicId !== null}
       selectionError={selectionError}
       onChange={setEpicInput}
+      onSelectOwned={chooseOwnedEpic}
       onSubmit={chooseEpic}
       onUseDefault={useDefaultEpic}
     />

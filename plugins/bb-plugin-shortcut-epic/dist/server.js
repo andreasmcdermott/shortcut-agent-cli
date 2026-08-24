@@ -16850,7 +16850,19 @@ var graphResponseSchema = external_exports.object({
   mutationsEnabled: external_exports.boolean(),
   generatedAt: external_exports.string()
 });
+var ownedEpicSchema = external_exports.object({
+  id: external_exports.number().int().positive(),
+  name: external_exports.string(),
+  url: external_exports.string().nullable()
+}).strict();
+var ownedEpicsResponseSchema = external_exports.object({
+  epics: external_exports.array(ownedEpicSchema)
+}).strict();
 var rpcContract = defineRpcContract({
+  listOwnedEpics: {
+    input: external_exports.object({ projectId: external_exports.string().nullable() }).strict(),
+    output: ownedEpicsResponseSchema
+  },
   loadGraph: {
     input: external_exports.object({
       projectId: external_exports.string().nullable(),
@@ -17213,6 +17225,45 @@ bb integration: project scope and API origin are server-controlled; init, --conf
     }
   });
   bb.rpc.register(rpcContract, {
+    async listOwnedEpics({ projectId }) {
+      const current = await settings.get();
+      const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
+      if (!token) {
+        throw new Error(
+          "Shortcut API token is not configured. Set it in Extensions \u2192 Plugins \u2192 Shortcut Agent."
+        );
+      }
+      const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const client = new ShortcutClient({
+        token,
+        workspace: configured.config.workspace,
+        baseUrl: process.env.SHORTCUT_API_URL ?? "https://api.app.shortcut.com"
+      });
+      const [identityPayload, epicsPayload] = await Promise.all([
+        client.request("GET", "/api/v3/member"),
+        client.request("GET", "/api/v3/epics", {
+          query: { includes_description: false }
+        })
+      ]);
+      const identity = unwrapEntity(identityPayload);
+      const epics = unwrapEntities(epicsPayload);
+      const memberId2 = String(identity?.id ?? "");
+      if (!memberId2) {
+        throw new Error("Shortcut did not identify the current member.");
+      }
+      const owned = epics.filter((epic) => {
+        const ownerIds = epic.owner_ids ?? [];
+        const owners2 = epic.owners?.entities ?? [];
+        return !epic.archived && !epic.completed && (ownerIds.some((ownerId) => String(ownerId) === memberId2) || owners2.some((owner) => String(owner.id) === memberId2));
+      }).map((epic) => ({
+        id: Number(epic.id),
+        name: epic.name ?? `Epic ${epic.id}`,
+        url: epic.app_url ?? null
+      })).filter((epic) => Number.isSafeInteger(epic.id) && epic.id > 0).sort(
+        (left, right) => left.name.localeCompare(right.name, void 0, { sensitivity: "base" })
+      );
+      return { epics: owned };
+    },
     async loadGraph({ projectId, epicId }) {
       const current = await settings.get();
       const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;

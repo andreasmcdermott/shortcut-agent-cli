@@ -135,6 +135,106 @@ describe("Shortcut Agent plugin backend", () => {
     await harness.lifecycle.dispose();
   });
 
+  it("lists current-user owned Epics and excludes completed or archived Epics", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/member")) {
+        return json({ id: "member-1" });
+      }
+      if (url.pathname.endsWith("/epics")) {
+        return json({
+          entities: [
+            {
+              id: 9,
+              name: "Zebra launch",
+              app_url: "https://app.shortcut.com/acme/epic/9",
+              archived: false,
+              completed: false,
+              owner_ids: ["member-1"],
+            },
+            {
+              id: 7,
+              name: "Alpha launch",
+              app_url: "https://app.shortcut.com/acme/epic/7",
+              archived: false,
+              completed: false,
+              owner_ids: ["member-1"],
+            },
+            {
+              id: 5,
+              name: "Finished launch",
+              archived: false,
+              completed: true,
+              owner_ids: ["member-1"],
+            },
+            {
+              id: 4,
+              name: "Archived launch",
+              archived: true,
+              completed: false,
+              owner_ids: ["member-1"],
+            },
+            {
+              id: 3,
+              name: "Someone else's launch",
+              archived: false,
+              completed: false,
+              owner_ids: ["member-2"],
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected Shortcut request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const project = {
+      id: "proj_1",
+      kind: "standard" as const,
+      name: "Agent project",
+      gitRemoteUrl: null,
+      createdAt: 1,
+      updatedAt: 1,
+      sources: [],
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "shortcut-epic",
+      settings: { apiToken: "secret" },
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async () => ({
+            content: JSON.stringify({ workspace: "acme", epic_id: 42 }),
+            contentEncoding: "utf8" as const,
+            mimeType: "application/json",
+            sizeBytes: 38,
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+
+    await expect(
+      harness.behavior.callRpc("listOwnedEpics", { projectId: "proj_1" }),
+    ).resolves.toEqual({
+      epics: [
+        {
+          id: 7,
+          name: "Alpha launch",
+          url: "https://app.shortcut.com/acme/epic/7",
+        },
+        {
+          id: 9,
+          name: "Zebra launch",
+          url: "https://app.shortcut.com/acme/epic/9",
+        },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await harness.lifecycle.dispose();
+  });
+
   it("reports missing token as a configuration state", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "shortcut-epic",

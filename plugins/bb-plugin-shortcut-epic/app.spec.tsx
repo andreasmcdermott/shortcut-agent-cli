@@ -71,8 +71,25 @@ const graph: GraphResponse = {
   generatedAt: "2026-08-19T17:00:00.000Z",
 };
 
+function installLocalStorage() {
+  const values = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      get length() {
+        return values.size;
+      },
+      clear: () => values.clear(),
+      getItem: (key: string) => values.get(key) ?? null,
+      key: (index: number) => [...values.keys()][index] ?? null,
+      removeItem: (key: string) => values.delete(key),
+      setItem: (key: string, value: string) => values.set(key, String(value)),
+    } satisfies Storage,
+  });
+}
+
 describe("Shortcut Agent nav panel", () => {
-  beforeEach(() => window.localStorage.clear());
+  beforeEach(installLocalStorage);
 
   it("renders graph state and refreshes through RPC", async () => {
     const app = await loadPluginApp(() => import("./app.js"));
@@ -90,6 +107,16 @@ describe("Shortcut Agent nav panel", () => {
       {
         context: { projectId: "proj_1" },
         rpc: {
+          listOwnedEpics: () => ({
+            epics: [
+              { id: 42, name: "Ship agent workflow", url: graph.epic.url },
+              {
+                id: 84,
+                name: "Second agent workflow",
+                url: "https://app.shortcut.com/acme/epic/84",
+              },
+            ],
+          }),
           loadGraph: () => graph,
           startWork: () => ({
             threadId: "thread_1",
@@ -125,23 +152,43 @@ describe("Shortcut Agent nav panel", () => {
     fireEvent.click(slot.getByRole("button", { name: "Fit" }));
     expect(slot.getByText("43%")).toBeTruthy();
 
-    expect(slot.inspection.rpcCalls).toEqual([
-      { method: "loadGraph", input: { projectId: "proj_1", epicId: null } },
-    ]);
+    expect(slot.inspection.rpcCalls).toContainEqual({
+      method: "loadGraph",
+      input: { projectId: "proj_1", epicId: null },
+    });
+    expect(slot.inspection.rpcCalls).toContainEqual({
+      method: "listOwnedEpics",
+      input: { projectId: "proj_1" },
+    });
 
     const epicInput = slot.getByRole("spinbutton", { name: "Epic ID" });
     expect((epicInput as HTMLInputElement).value).toBe("42");
-    fireEvent.change(epicInput, { target: { value: "84" } });
-    fireEvent.click(slot.getByRole("button", { name: "Load" }));
+
+    const ownedEpicSelect = slot.getByRole("combobox", { name: "Owned Epic" });
+    expect(slot.getByRole("option", { name: "Second agent workflow (epic-84)" })).toBeTruthy();
+    fireEvent.change(ownedEpicSelect, { target: { value: "84" } });
     expect(slot.inspection.navigateCalls).toContainEqual({
       method: "toPluginPanel",
       path: "epic",
       options: { subPath: "84" },
     });
-    expect(window.localStorage.getItem("shortcut-agent:last-epic:proj_1")).toBe("84");
+    expect((epicInput as HTMLInputElement).value).toBe("84");
+
+    fireEvent.change(epicInput, { target: { value: "99" } });
+    fireEvent.click(slot.getByRole("button", { name: "Load" }));
+    expect(slot.inspection.navigateCalls).toContainEqual({
+      method: "toPluginPanel",
+      path: "epic",
+      options: { subPath: "99" },
+    });
+    expect(window.localStorage.getItem("shortcut-agent:last-epic:proj_1")).toBe("99");
 
     fireEvent.click(slot.getByRole("button", { name: "Refresh Epic graph" }));
-    await waitFor(() => expect(slot.inspection.rpcCalls).toHaveLength(2));
+    await waitFor(() =>
+      expect(
+        slot.inspection.rpcCalls.filter((call) => call.method === "loadGraph"),
+      ).toHaveLength(2),
+    );
 
     slot.lifecycle.unmount();
   });
@@ -155,6 +202,7 @@ describe("Shortcut Agent nav panel", () => {
       {
         context: { projectId: "proj_1" },
         rpc: {
+          listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => graph,
           startWork: () => ({
             threadId: "thread_1",
@@ -197,6 +245,7 @@ describe("Shortcut Agent nav panel", () => {
       {
         context: { projectId: "proj_1" },
         rpc: {
+          listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => ({ ...graph, mutationsEnabled: false }),
           startWork: () => ({
             threadId: "thread_1",
@@ -233,6 +282,7 @@ describe("Shortcut Agent nav panel", () => {
       {
         context: { projectId: "proj_1" },
         rpc: {
+          listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => graph,
           startWork: () => ({
             threadId: "thread_1",
@@ -244,10 +294,39 @@ describe("Shortcut Agent nav panel", () => {
     );
 
     await slot.findByText("Ship agent workflow");
-    expect(slot.inspection.rpcCalls[0]).toEqual({
+    expect(slot.inspection.rpcCalls).toContainEqual({
       method: "loadGraph",
       input: { projectId: "proj_1", epicId: 84 },
     });
+
+    slot.lifecycle.unmount();
+  });
+
+  it("keeps manual Epic selection available when owned Epics fail to load", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const slot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      {
+        context: { projectId: "proj_1" },
+        rpc: {
+          listOwnedEpics: () => {
+            throw new Error("Shortcut unavailable");
+          },
+          loadGraph: () => graph,
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
+      },
+    );
+
+    await slot.findByText("Could not load owned Epics. Enter an Epic ID manually.");
+    expect(slot.getByRole("spinbutton", { name: "Epic ID" })).toBeTruthy();
+    expect(slot.getByRole("button", { name: "Load" })).toBeTruthy();
 
     slot.lifecycle.unmount();
   });
