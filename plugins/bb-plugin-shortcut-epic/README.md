@@ -18,9 +18,15 @@ The graph:
 - warns instead of hanging when pre-existing Shortcut data contains a cycle
 - refreshes every 60 seconds and on demand
 
-Story cards link to Shortcut. The graph UI is read-only, while agents can use
-the plugin's server-side `bb shortcut-agent` command or native tools for claims
-and lifecycle mutations. Use the **Epic ID** control
+Story cards link to Shortcut, and each card has a `…` menu with **Start work in
+bb**, **Copy ID**, and **Open in Shortcut**. Start work does not touch the Story:
+it reads it and spawns a bb thread in the graph's project whose prompt carries
+the Story description plus the `start`, `complete`, and `release` commands, so
+the agent claims the work itself and the claim is attributed to that thread. It
+is offered only for Ready, unblocked Stories, and only while **Enable agent
+mutations** is on, since the agent needs those commands; otherwise the item is
+disabled and explains why. Everything else in the graph UI is read-only. Use the
+**Epic ID** control
 in the panel header to switch Epics. The selected ID is encoded in the panel URL,
 so each Epic can be bookmarked or opened independently. The last successfully
 opened Epic is remembered per bb project in the current browser; **Use default**
@@ -137,6 +143,12 @@ The plugin also registers these native tools:
 Mutation tools are selected only when **Enable agent mutations** is on, and all
 mutation handlers re-check that setting at execution time. Tool and command
 results contain normalized Shortcut data, never the token.
+
+The plugin bundles one skill, `agent-next-ready`, which appears in the
+composer's `/` menu as `/agent-next-ready`. It walks an agent through resolving
+the Epic, reading the queue with `bb shortcut-agent ready --epic ID`, claiming
+`stories[0]`, and implementing it. Because claiming is a mutation, the skill is
+selected only when **Enable agent mutations** is on.
 
 After changing settings, bb automatically retries a plugin waiting for
 configuration. Agent tool selection changes apply the next time an agent session

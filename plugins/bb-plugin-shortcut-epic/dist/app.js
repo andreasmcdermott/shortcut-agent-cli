@@ -264,6 +264,18 @@ function layoutGraph(nodes, edges) {
   };
 }
 
+// bb-plugin-runtime-shim:sonner
+var runtime3 = globalThis.__bbPluginRuntime;
+if (runtime3 == null || runtime3.sonner == null) {
+  throw new Error('Cannot load "sonner": this bundle must be loaded by the BB app, which provides the shared plugin runtime (globalThis.__bbPluginRuntime).');
+}
+var mod3 = runtime3.sonner;
+var {
+  Toaster,
+  toast,
+  useSonner
+} = mod3;
+
 // node_modules/@radix-ui/react-compose-refs/dist/index.mjs
 var __defProp2 = Object.defineProperty;
 var __name = (target, value) => __defProp2(target, "name", { value, configurable: true });
@@ -771,8 +783,8 @@ var createParseClassName = (config) => {
 };
 var createSortModifiers = (config) => {
   const modifierWeights = /* @__PURE__ */ new Map();
-  config.orderSensitiveModifiers.forEach((mod4, index) => {
-    modifierWeights.set(mod4, 1e6 + index);
+  config.orderSensitiveModifiers.forEach((mod7, index) => {
+    modifierWeights.set(mod7, 1e6 + index);
   });
   return (modifiers) => {
     const result = [];
@@ -3759,18 +3771,19 @@ function cn(...inputs) {
 
 // components/ui/motion.ts
 var CONTROL_HOVER_TRANSITION = "transition-colors duration-150 hover:duration-0";
+var LIST_HOVER_TRANSITION = "transition-none";
 
 // bb-plugin-runtime-shim:react/jsx-runtime
-var runtime3 = globalThis.__bbPluginRuntime;
-if (runtime3 == null || runtime3.jsxRuntime == null) {
+var runtime4 = globalThis.__bbPluginRuntime;
+if (runtime4 == null || runtime4.jsxRuntime == null) {
   throw new Error('Cannot load "react/jsx-runtime": this bundle must be loaded by the BB app, which provides the shared plugin runtime (globalThis.__bbPluginRuntime).');
 }
-var mod3 = runtime3.jsxRuntime;
+var mod4 = runtime4.jsxRuntime;
 var {
   Fragment: Fragment2,
   jsx,
   jsxs
-} = mod3;
+} = mod4;
 
 // components/ui/button.tsx
 var buttonVariants = cva(
@@ -3812,6 +3825,786 @@ var Button = forwardRef(
   }
 );
 Button.displayName = "Button";
+
+// bb-plugin-runtime-shim:@radix-ui/react-dropdown-menu
+var runtime5 = globalThis.__bbPluginRuntime;
+if (runtime5 == null || runtime5.radixDropdownMenu == null) {
+  throw new Error('Cannot load "@radix-ui/react-dropdown-menu": this bundle must be loaded by the BB app, which provides the shared plugin runtime (globalThis.__bbPluginRuntime).');
+}
+var mod5 = runtime5.radixDropdownMenu;
+var {
+  Arrow,
+  CheckboxItem,
+  Content,
+  DropdownMenu,
+  DropdownMenuArrow,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuItemIndicator,
+  DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+  Group,
+  Item,
+  ItemIndicator,
+  Label,
+  Portal,
+  RadioGroup,
+  RadioItem,
+  Root,
+  Separator,
+  Sub,
+  SubContent,
+  SubTrigger,
+  Trigger,
+  createDropdownMenuScope
+} = mod5;
+
+// lib/portal-scope.ts
+function usePortalScopeProps() {
+  const pluginId = true ? "shortcut-epic" : void 0;
+  return {
+    "data-bb-portaled-overlay": "",
+    "data-bb-plugin-root": "",
+    ...pluginId !== void 0 ? { "data-bb-plugin": pluginId } : {}
+  };
+}
+
+// components/ui/coarse-pointer-sizing.ts
+var COARSE_POINTER_CHECK_SLOT_CLASS = "h-3.5 w-3.5 max-md:pointer-coarse:h-5 max-md:pointer-coarse:w-5";
+var HEADER_ICON_BUTTON_BOX_CLASS = "h-[28px] w-[28px] rounded-md p-0 max-md:pointer-coarse:h-[36px] max-md:pointer-coarse:w-[36px]";
+var COARSE_POINTER_HEADER_ICON_BUTTON_CLASS = `${HEADER_ICON_BUTTON_BOX_CLASS} [&_svg]:size-[16px] max-md:pointer-coarse:[&_svg]:size-[20px]`;
+var COARSE_POINTER_HEADER_REDUCED_GLYPH_ICON_BUTTON_CLASS = `${HEADER_ICON_BUTTON_BOX_CLASS} [&_svg]:size-[13px] max-md:pointer-coarse:[&_svg]:size-[16px]`;
+
+// bb-plugin-runtime-shim:react-dom
+var runtime6 = globalThis.__bbPluginRuntime;
+if (runtime6 == null || runtime6.reactDom == null) {
+  throw new Error('Cannot load "react-dom": this bundle must be loaded by the BB app, which provides the shared plugin runtime (globalThis.__bbPluginRuntime).');
+}
+var mod6 = runtime6.reactDom;
+var {
+  createPortal,
+  flushSync,
+  preconnect,
+  prefetchDNS,
+  preinit,
+  preinitModule,
+  preload,
+  preloadModule,
+  requestFormReset,
+  unstable_batchedUpdates,
+  useFormState,
+  useFormStatus,
+  version: version2
+} = mod6;
+
+// components/ui/overlay-trigger.ts
+var OVERLAY_TRIGGER_CLASS_NAME = "select-none";
+var NON_TEXT_INPUT_TYPES = /* @__PURE__ */ new Set([
+  "button",
+  "checkbox",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit"
+]);
+var getOverlayTriggerClassName = (className) => cn(OVERLAY_TRIGGER_CLASS_NAME, className);
+function isKeyboardInputElement(element) {
+  if (element instanceof HTMLTextAreaElement) return true;
+  if (element instanceof HTMLInputElement) {
+    return !element.disabled && !element.readOnly && !NON_TEXT_INPUT_TYPES.has(element.type);
+  }
+  if (!(element instanceof HTMLElement)) return false;
+  return element.isContentEditable || element.closest("[contenteditable='true']") !== null;
+}
+function blurActiveKeyboardInputWithin(container) {
+  if (typeof document === "undefined") return;
+  const activeElement = document.activeElement;
+  if (!activeElement || !isKeyboardInputElement(activeElement)) return;
+  if (container !== null && !container.contains(activeElement)) return;
+  activeElement.blur();
+}
+function blurActiveKeyboardInputBeforeOverlayOpen() {
+  blurActiveKeyboardInputWithin(null);
+}
+function blurActiveKeyboardInputBeforeOverlayClose() {
+  blurActiveKeyboardInputWithin(null);
+}
+function preventOverlayTriggerSelection(event) {
+  event.preventDefault();
+}
+var lastInputModality = "pointer";
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "keydown",
+    () => {
+      lastInputModality = "keyboard";
+    },
+    { capture: true }
+  );
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      lastInputModality = "pointer";
+    },
+    { capture: true }
+  );
+}
+function isLastInputKeyboard() {
+  return lastInputModality === "keyboard";
+}
+
+// components/ui/hooks/use-media-query.ts
+var mediaQueryCache = /* @__PURE__ */ new Map();
+function createMediaQueryRef(query) {
+  if (typeof window === "undefined" || !window.matchMedia) return null;
+  let ref = mediaQueryCache.get(query);
+  if (ref) return ref;
+  const mql = window.matchMedia(query);
+  const listeners = /* @__PURE__ */ new Set();
+  const onChange = () => {
+    for (const listener of listeners) listener();
+  };
+  ref = {
+    mql,
+    subscribe(notify) {
+      const wasEmpty = listeners.size === 0;
+      listeners.add(notify);
+      if (wasEmpty) {
+        mql.addEventListener("change", onChange);
+      }
+      return () => {
+        listeners.delete(notify);
+        if (listeners.size === 0) {
+          mql.removeEventListener("change", onChange);
+          mediaQueryCache.delete(query);
+        }
+      };
+    }
+  };
+  mediaQueryCache.set(query, ref);
+  return ref;
+}
+function subscribeMediaQuery(query, notify) {
+  return createMediaQueryRef(query)?.subscribe(notify) ?? (() => {
+  });
+}
+function getMediaQuerySnapshot(query) {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return mediaQueryCache.get(query)?.mql.matches ?? window.matchMedia(query).matches;
+}
+function useMediaQuery(query) {
+  return useSyncExternalStore(
+    (notify) => subscribeMediaQuery(query, notify),
+    () => getMediaQuerySnapshot(query),
+    () => false
+  );
+}
+
+// components/ui/hooks/use-compact-viewport.tsx
+var COMPACT_VIEWPORT_QUERY = "(max-width: 767px)";
+var CompactViewportOverrideContext = createContext(null);
+function useIsCompactViewport() {
+  const override = useContext(CompactViewportOverrideContext);
+  const isCompactViewport = useMediaQuery(COMPACT_VIEWPORT_QUERY);
+  if (override !== null) {
+    return override;
+  }
+  return isCompactViewport;
+}
+
+// components/ui/responsive-overlay.tsx
+var RESPONSIVE_DRAWER_REALIZE_FALLBACK_MS = 120;
+function resetDrawerKeyboardStyles(drawerElement) {
+  if (drawerElement === null) return;
+  drawerElement.style.height = "";
+  drawerElement.style.bottom = "";
+}
+function useResponsiveRoot(controlledOpen, controlledOnChange, defaultOpen = false) {
+  const isCompactViewport = useIsCompactViewport();
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== void 0;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const onOpenChange = useCallback(
+    (next) => {
+      if (open && !next && isCompactViewport) {
+        blurActiveKeyboardInputBeforeOverlayClose();
+      }
+      if (!isControlled) {
+        setInternalOpen(next);
+      }
+      controlledOnChange?.(next);
+    },
+    [isCompactViewport, isControlled, controlledOnChange, open]
+  );
+  return useMemo(
+    () => ({ isCompactViewport, open, onOpenChange }),
+    [isCompactViewport, open, onOpenChange]
+  );
+}
+var MobileTrigger = forwardRef(
+  ({
+    asChild,
+    open,
+    onOpenChange,
+    haspopup,
+    onClick,
+    children,
+    className,
+    ...domProps
+  }, ref) => {
+    const triggerClassName = getOverlayTriggerClassName(className);
+    const handleClick = (e) => {
+      onClick?.(e);
+      if (!e.defaultPrevented) {
+        if (!open) {
+          blurActiveKeyboardInputBeforeOverlayOpen();
+        }
+        onOpenChange(!open);
+      }
+    };
+    const ariaProps = {
+      "aria-expanded": open,
+      "aria-haspopup": haspopup,
+      "data-state": open ? "open" : "closed"
+    };
+    if (asChild) {
+      return /* @__PURE__ */ jsx(
+        Slot,
+        {
+          ref,
+          onClick: handleClick,
+          onMouseDown: preventOverlayTriggerSelection,
+          className: triggerClassName,
+          ...ariaProps,
+          ...domProps,
+          children
+        }
+      );
+    }
+    return /* @__PURE__ */ jsx(
+      "button",
+      {
+        ref,
+        type: "button",
+        onClick: handleClick,
+        onMouseDown: preventOverlayTriggerSelection,
+        className: triggerClassName,
+        ...ariaProps,
+        ...domProps,
+        children
+      }
+    );
+  }
+);
+MobileTrigger.displayName = "MobileTrigger";
+var RADIX_CONTENT_PROP_NAMES = [
+  "side",
+  "sideOffset",
+  "align",
+  "alignOffset",
+  "collisionPadding",
+  "collisionBoundary",
+  "arrowPadding",
+  "sticky",
+  "hideWhenDetached",
+  "avoidCollisions",
+  "onOpenAutoFocus",
+  "onCloseAutoFocus",
+  "onEscapeKeyDown",
+  "onPointerDownOutside",
+  "onFocusOutside",
+  "onInteractOutside"
+];
+var RADIX_CONTENT_KEYS = new Set(
+  RADIX_CONTENT_PROP_NAMES
+);
+function stripRadixContentProps(props) {
+  const result = {};
+  for (const key of Object.keys(props)) {
+    if (!RADIX_CONTENT_KEYS.has(key)) {
+      result[key] = props[key];
+    }
+  }
+  return result;
+}
+function useResponsiveDrawerRealization({
+  open,
+  enabled = true
+}) {
+  const [isContentRealized, setIsContentRealized] = useState(false);
+  const realizeContent = useCallback(
+    () => setIsContentRealized(true),
+    []
+  );
+  useEffect(() => {
+    if (!enabled || !open || isContentRealized) {
+      return;
+    }
+    let firstFrame = null;
+    let secondFrame = null;
+    firstFrame = window.requestAnimationFrame(() => {
+      firstFrame = null;
+      secondFrame = window.requestAnimationFrame(() => {
+        secondFrame = null;
+        realizeContent();
+      });
+    });
+    const fallback = window.setTimeout(
+      realizeContent,
+      RESPONSIVE_DRAWER_REALIZE_FALLBACK_MS
+    );
+    return () => {
+      if (firstFrame !== null) {
+        window.cancelAnimationFrame(firstFrame);
+      }
+      if (secondFrame !== null) {
+        window.cancelAnimationFrame(secondFrame);
+      }
+      window.clearTimeout(fallback);
+    };
+  }, [enabled, isContentRealized, open, realizeContent]);
+  return {
+    isContentRealized: enabled && isContentRealized,
+    realizeContent
+  };
+}
+function ResponsiveDrawerShell({
+  open,
+  onOpenChange,
+  srLabel,
+  labelledBy,
+  describedBy,
+  contentClassName,
+  onContentAnimationEnd,
+  children
+}) {
+  const { isContentRealized } = useResponsiveDrawerRealization({ open });
+  if (!open && !isContentRealized) {
+    return null;
+  }
+  return /* @__PURE__ */ jsx(
+    PersistentResponsiveDrawerShell,
+    {
+      open,
+      onOpenChange,
+      srLabel,
+      labelledBy,
+      describedBy,
+      contentClassName,
+      onContentAnimationEnd,
+      children: isContentRealized ? children : /* @__PURE__ */ jsx(
+        "div",
+        {
+          "aria-hidden": "true",
+          className: "min-h-32",
+          "data-responsive-drawer-placeholder": ""
+        }
+      )
+    }
+  );
+}
+var PERSISTENT_DRAWER_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+var PERSISTENT_DRAWER_CLOSE_RATIO = 0.25;
+var PERSISTENT_DRAWER_CLOSE_VELOCITY_PX_PER_SEC = 450;
+var PERSISTENT_DRAWER_FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])'
+].join(",");
+var persistentDrawerStacks = /* @__PURE__ */ new WeakMap();
+function getDrawerFocusableElements(panel) {
+  return Array.from(
+    panel.querySelectorAll(PERSISTENT_DRAWER_FOCUSABLE_SELECTOR)
+  ).filter(
+    (element) => element.closest('[aria-hidden="true"], [inert]') === null
+  );
+}
+function activeElementIsInAnotherOverlay(activeElement, panel) {
+  const overlay = activeElement?.closest(
+    "[data-bb-portaled-overlay]"
+  );
+  return overlay !== null && overlay !== void 0 && overlay !== panel;
+}
+function handleDrawerTab(event, panel) {
+  const activeElement = panel.ownerDocument.activeElement;
+  if (!panel.contains(activeElement) && activeElementIsInAnotherOverlay(activeElement, panel)) {
+    return;
+  }
+  const focusable = getDrawerFocusableElements(panel);
+  event.preventDefault();
+  if (focusable.length === 0) {
+    panel.focus({ preventScroll: true });
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey) {
+    if (!panel.contains(activeElement) || activeElement === panel || activeElement === first) {
+      last?.focus({ preventScroll: true });
+      return;
+    }
+    const index2 = focusable.indexOf(activeElement);
+    focusable[Math.max(0, index2 - 1)]?.focus({ preventScroll: true });
+    return;
+  }
+  if (!panel.contains(activeElement) || activeElement === panel || activeElement === last) {
+    first?.focus({ preventScroll: true });
+    return;
+  }
+  const index = focusable.indexOf(activeElement);
+  focusable[Math.min(focusable.length - 1, index + 1)]?.focus({
+    preventScroll: true
+  });
+}
+function registerOpenDrawer(ownerDocument, entry) {
+  let stack = persistentDrawerStacks.get(ownerDocument);
+  if (stack === void 0) {
+    const entries = [];
+    const handleKeyDown = (event) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const topEntry = entries[entries.length - 1];
+      const panel = topEntry?.panel() ?? null;
+      if (topEntry === void 0 || panel === null) {
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        topEntry.requestClose();
+      } else if (event.key === "Tab") {
+        handleDrawerTab(event, panel);
+      }
+    };
+    stack = { entries, handleKeyDown };
+    persistentDrawerStacks.set(ownerDocument, stack);
+    ownerDocument.addEventListener("keydown", handleKeyDown);
+  }
+  stack.entries.push(entry);
+  return () => {
+    const currentStack = persistentDrawerStacks.get(ownerDocument);
+    if (currentStack === void 0) {
+      return;
+    }
+    const index = currentStack.entries.indexOf(entry);
+    if (index >= 0) {
+      currentStack.entries.splice(index, 1);
+    }
+    if (currentStack.entries.length === 0) {
+      ownerDocument.removeEventListener("keydown", currentStack.handleKeyDown);
+      persistentDrawerStacks.delete(ownerDocument);
+    }
+  };
+}
+function PersistentResponsiveDrawerShell({
+  open,
+  onOpenChange,
+  srLabel,
+  labelledBy,
+  describedBy,
+  contentClassName,
+  motionDurationMs = 220,
+  onContentAnimationEnd,
+  children
+}) {
+  const panelRef = useRef(null);
+  const backdropRef = useRef(null);
+  const dragRef = useRef(null);
+  const returnFocusRef = useRef(null);
+  const settledStateRef = useRef(null);
+  const labelId = useId();
+  const portalScopeProps = usePortalScopeProps();
+  const transition = `transform ${motionDurationMs}ms ${PERSISTENT_DRAWER_EASING}`;
+  const backdropTransition = `opacity ${motionDurationMs}ms ${PERSISTENT_DRAWER_EASING}`;
+  const onOpenChangeRef = useRef(onOpenChange);
+  useLayoutEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
+  const requestClose = useCallback(() => {
+    blurActiveKeyboardInputWithin(panelRef.current);
+    resetDrawerKeyboardStyles(panelRef.current);
+    onOpenChangeRef.current(false);
+  }, []);
+  const reportSettled = useCallback(
+    (settledOpen) => {
+      if (settledStateRef.current === settledOpen) {
+        return;
+      }
+      settledStateRef.current = settledOpen;
+      onContentAnimationEnd?.(settledOpen);
+    },
+    [onContentAnimationEnd]
+  );
+  useEffect(() => {
+    settledStateRef.current = null;
+    const timeout = window.setTimeout(
+      () => reportSettled(open),
+      motionDurationMs + 50
+    );
+    return () => window.clearTimeout(timeout);
+  }, [motionDurationMs, open, reportSettled]);
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+    const panel = panelRef.current;
+    if (panel === null) {
+      return;
+    }
+    const ownerDocument = panel.ownerDocument;
+    const previousFocus = ownerDocument.activeElement;
+    returnFocusRef.current = previousFocus instanceof HTMLElement ? previousFocus : null;
+    const unregister = registerOpenDrawer(ownerDocument, {
+      panel: () => panelRef.current,
+      requestClose
+    });
+    panel.focus({ preventScroll: true });
+    return () => {
+      unregister();
+    };
+  }, [open, requestClose]);
+  const previousOpenRef = useRef(open);
+  useLayoutEffect(() => {
+    if (previousOpenRef.current && !open) {
+      blurActiveKeyboardInputWithin(panelRef.current);
+      resetDrawerKeyboardStyles(panelRef.current);
+      const returnFocus = returnFocusRef.current;
+      if (returnFocus?.isConnected && returnFocus.closest('[aria-hidden="true"], [inert]') === null) {
+        returnFocus.focus({ preventScroll: true });
+      }
+      returnFocusRef.current = null;
+    }
+    previousOpenRef.current = open;
+  }, [open]);
+  const setDragPosition = useCallback(
+    (offsetY, height, animate) => {
+      const panel = panelRef.current;
+      const backdrop = backdropRef.current;
+      if (panel === null || backdrop === null) {
+        return;
+      }
+      panel.style.transition = animate ? transition : "none";
+      panel.style.transform = `translate3d(0, ${offsetY}px, 0)`;
+      backdrop.style.transition = animate ? backdropTransition : "none";
+      backdrop.style.opacity = String(
+        Math.max(0, Math.min(1, 1 - offsetY / height))
+      );
+    },
+    [backdropTransition, transition]
+  );
+  const handleDragStart = useCallback(
+    (event) => {
+      if (!open || event.button !== 0) {
+        return;
+      }
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const nowMs = Date.now();
+      const height = Math.max(panelRef.current?.clientHeight ?? 0, 1);
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        lastY: event.clientY,
+        lastTimeMs: nowMs,
+        velocityY: 0,
+        height
+      };
+      setDragPosition(0, height, false);
+      event.preventDefault();
+    },
+    [open, setDragPosition]
+  );
+  const handleDragMove = useCallback(
+    (event) => {
+      const drag = dragRef.current;
+      if (drag === null || drag.pointerId !== event.pointerId) {
+        return;
+      }
+      const nowMs = Date.now();
+      const elapsedMs = nowMs - drag.lastTimeMs;
+      if (elapsedMs > 0) {
+        drag.velocityY = (event.clientY - drag.lastY) / elapsedMs * 1e3;
+        drag.lastY = event.clientY;
+        drag.lastTimeMs = nowMs;
+      }
+      setDragPosition(
+        Math.max(0, event.clientY - drag.startY),
+        drag.height,
+        false
+      );
+      event.preventDefault();
+    },
+    [setDragPosition]
+  );
+  const finishDrag = useCallback(
+    (event, cancelled) => {
+      const drag = dragRef.current;
+      if (drag === null || drag.pointerId !== event.pointerId) {
+        return;
+      }
+      dragRef.current = null;
+      const offsetY = Math.max(0, event.clientY - drag.startY);
+      const shouldClose = !cancelled && (offsetY >= drag.height * PERSISTENT_DRAWER_CLOSE_RATIO || drag.velocityY >= PERSISTENT_DRAWER_CLOSE_VELOCITY_PX_PER_SEC);
+      if (shouldClose) {
+        setDragPosition(drag.height, drag.height, true);
+        requestClose();
+      } else {
+        setDragPosition(0, drag.height, true);
+      }
+      event.preventDefault();
+    },
+    [requestClose, setDragPosition]
+  );
+  const portalTarget = typeof document === "undefined" ? null : document.body;
+  if (portalTarget === null) {
+    return null;
+  }
+  return createPortal(
+    /* @__PURE__ */ jsxs(Fragment2, { children: [
+      /* @__PURE__ */ jsx(
+        "div",
+        {
+          ref: backdropRef,
+          ...portalScopeProps,
+          "aria-hidden": "true",
+          "data-persistent-drawer-backdrop": "",
+          "data-state": open ? "open" : "closed",
+          className: "fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]",
+          style: {
+            opacity: open ? 1 : 0,
+            pointerEvents: open ? "auto" : "none",
+            transition: backdropTransition
+          },
+          onClick: requestClose,
+          onTouchMove: (event) => event.preventDefault()
+        }
+      ),
+      /* @__PURE__ */ jsxs(
+        "div",
+        {
+          ref: panelRef,
+          ...portalScopeProps,
+          "aria-hidden": !open,
+          "aria-labelledby": labelledBy ?? (srLabel === void 0 ? void 0 : labelId),
+          "aria-describedby": describedBy,
+          "aria-modal": open || void 0,
+          "data-bb-portaled-overlay": "",
+          "data-persistent-drawer-content": "",
+          "data-state": open ? "open" : "closed",
+          inert: !open,
+          role: "dialog",
+          tabIndex: -1,
+          className: cn(
+            "fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[92dvh] flex-col rounded-t-xl border bg-background outline-none",
+            contentClassName
+          ),
+          style: {
+            transform: open ? "translate3d(0, 0, 0)" : "translate3d(0, 100%, 0)",
+            transition,
+            willChange: open ? "transform" : void 0
+          },
+          onTransitionEnd: (event) => {
+            if (event.currentTarget === event.target && event.propertyName === "transform") {
+              reportSettled(open);
+            }
+          },
+          children: [
+            /* @__PURE__ */ jsx(
+              "div",
+              {
+                "data-persistent-drawer-handle": "",
+                className: "mx-auto flex h-8 w-16 shrink-0 touch-none cursor-grab items-center justify-center active:cursor-grabbing",
+                onPointerDown: handleDragStart,
+                onPointerMove: handleDragMove,
+                onPointerUp: (event) => finishDrag(event, false),
+                onPointerCancel: (event) => finishDrag(event, true),
+                children: /* @__PURE__ */ jsx("div", { className: "h-1 w-10 rounded-full bg-muted-foreground/20" })
+              }
+            ),
+            srLabel === void 0 ? null : /* @__PURE__ */ jsx("h2", { id: labelId, className: "sr-only", children: srLabel }),
+            children
+          ]
+        }
+      )
+    ] }),
+    portalTarget
+  );
+}
+
+// components/ui/menu-item-hover.tsx
+var MENU_NAV_KEYS = /* @__PURE__ */ new Set([
+  "ArrowDown",
+  "ArrowUp",
+  "Home",
+  "End",
+  "PageDown",
+  "PageUp"
+]);
+var MENU_ITEM_LAST_HOVERED_CLASS = "data-[last-hovered]:bg-state-hover data-[last-hovered]:text-foreground";
+var MenuHoverContext = createContext({
+  lastHoveredId: null,
+  setLastHovered: () => {
+  },
+  clearLastHovered: () => {
+  }
+});
+function MenuHoverProvider({ children }) {
+  const [lastHoveredId, setLastHoveredId] = useState(null);
+  const value = useMemo(
+    () => ({
+      lastHoveredId,
+      setLastHovered: setLastHoveredId,
+      clearLastHovered: () => setLastHoveredId(null)
+    }),
+    [lastHoveredId]
+  );
+  return /* @__PURE__ */ jsx(MenuHoverContext.Provider, { value, children });
+}
+function useMenuItemHover(handlers) {
+  const id = useId();
+  const { lastHoveredId, setLastHovered, clearLastHovered } = useContext(MenuHoverContext);
+  const isLastHovered = lastHoveredId === id;
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const onPointerEnter = useCallback(
+    (event) => {
+      handlersRef.current?.onPointerEnter?.(event);
+      setLastHovered(id);
+    },
+    [id, setLastHovered]
+  );
+  const onKeyDown = useCallback(
+    (event) => {
+      handlersRef.current?.onKeyDown?.(event);
+      if (MENU_NAV_KEYS.has(event.key)) {
+        clearLastHovered();
+      }
+    },
+    [clearLastHovered]
+  );
+  return {
+    isLastHovered,
+    hoverProps: {
+      "data-last-hovered": isLastHovered ? "" : void 0,
+      onPointerEnter,
+      onKeyDown
+    }
+  };
+}
 
 // node_modules/@hugeicons/react/dist/esm/HugeiconsIcon.js
 var defaultAttributes = {
@@ -4814,6 +5607,465 @@ function Icon({
   );
 }
 
+// components/ui/dropdown-menu.tsx
+var MENU_ITEM_NEUTRAL_STATE_CLASS = "focus:bg-state-hover focus:text-foreground data-[last-hovered]:bg-state-hover data-[last-hovered]:text-foreground";
+var MENU_ITEM_DESTRUCTIVE_STATE_CLASS = "text-destructive focus:bg-destructive/15 focus:text-destructive data-[last-hovered]:bg-destructive/15";
+var MENU_ITEM_DESTRUCTIVE_TOUCH_CLASS = "text-destructive focus:bg-destructive/15 focus:text-destructive active:bg-destructive/20 active:text-destructive";
+var ResponsiveMenuContext = createContext({
+  isCompactViewport: false,
+  open: false,
+  onOpenChange: () => {
+  }
+});
+function useResponsiveMenu() {
+  return useContext(ResponsiveMenuContext);
+}
+function DropdownMenu2({
+  children,
+  open: controlledOpen,
+  onOpenChange: controlledOnChange,
+  defaultOpen,
+  ...props
+}) {
+  const ctx = useResponsiveRoot(
+    controlledOpen,
+    controlledOnChange,
+    defaultOpen
+  );
+  if (ctx.isCompactViewport) {
+    return /* @__PURE__ */ jsx(ResponsiveMenuContext.Provider, { value: ctx, children });
+  }
+  return /* @__PURE__ */ jsx(
+    Root,
+    {
+      open: ctx.open,
+      onOpenChange: ctx.onOpenChange,
+      ...props,
+      children: /* @__PURE__ */ jsx(ResponsiveMenuContext.Provider, { value: ctx, children })
+    }
+  );
+}
+var DropdownMenuTrigger2 = forwardRef(({ asChild, children, className, ...props }, ref) => {
+  const { isCompactViewport, open, onOpenChange } = useResponsiveMenu();
+  if (isCompactViewport) {
+    return /* @__PURE__ */ jsx(
+      MobileTrigger,
+      {
+        ref,
+        asChild,
+        open,
+        onOpenChange,
+        haspopup: "menu",
+        className,
+        ...props,
+        children
+      }
+    );
+  }
+  return /* @__PURE__ */ jsx(
+    Trigger,
+    {
+      ref,
+      asChild,
+      className: getOverlayTriggerClassName(className),
+      onMouseDown: (event) => {
+        if (!open) {
+          blurActiveKeyboardInputBeforeOverlayOpen();
+        }
+        preventOverlayTriggerSelection(event);
+      },
+      ...props,
+      children
+    }
+  );
+});
+DropdownMenuTrigger2.displayName = "DropdownMenuTrigger";
+var DropdownMenuContent2 = forwardRef(
+  ({
+    className,
+    sideOffset = 4,
+    children,
+    mobileTitle,
+    onCloseAutoFocus,
+    ...props
+  }, ref) => {
+    const { isCompactViewport, open, onOpenChange } = useResponsiveMenu();
+    const scopeProps = usePortalScopeProps();
+    if (isCompactViewport) {
+      const domProps = stripRadixContentProps(props);
+      return /* @__PURE__ */ jsx(
+        ResponsiveDrawerShell,
+        {
+          open,
+          onOpenChange,
+          srLabel: mobileTitle ?? "Menu",
+          children: /* @__PURE__ */ jsx(
+            "div",
+            {
+              ref,
+              className: cn(
+                "flex flex-col gap-0.5 overflow-y-auto p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]",
+                className
+              ),
+              style: { minWidth: "auto", maxWidth: "none", width: "auto" },
+              ...domProps,
+              children
+            }
+          )
+        }
+      );
+    }
+    return /* @__PURE__ */ jsx(Portal, { children: /* @__PURE__ */ jsx(
+      Content,
+      {
+        ref,
+        ...scopeProps,
+        sideOffset,
+        onCloseAutoFocus: (event) => {
+          if (!isLastInputKeyboard()) {
+            event.preventDefault();
+          }
+          onCloseAutoFocus?.(event);
+        },
+        className: cn(
+          "z-50 min-w-28 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          className
+        ),
+        ...props,
+        children: /* @__PURE__ */ jsx(MenuHoverProvider, { children })
+      }
+    ) });
+  }
+);
+DropdownMenuContent2.displayName = "DropdownMenuContent";
+function createSelectEvent() {
+  return new Event("select", { cancelable: true });
+}
+var DropdownMenuItem2 = forwardRef(
+  ({
+    className,
+    inset,
+    variant = "default",
+    onSelect,
+    disabled,
+    role = "menuitem",
+    "aria-checked": ariaChecked,
+    textValue: _textValue,
+    children,
+    onPointerEnter: callerPointerEnter,
+    onKeyDown: callerKeyDown,
+    ...domProps
+  }, ref) => {
+    const { isCompactViewport, onOpenChange } = useResponsiveMenu();
+    const { hoverProps } = useMenuItemHover({
+      onPointerEnter: callerPointerEnter,
+      onKeyDown: callerKeyDown
+    });
+    if (isCompactViewport) {
+      return /* @__PURE__ */ jsx(
+        "button",
+        {
+          ref,
+          type: "button",
+          role,
+          disabled,
+          "aria-disabled": disabled || void 0,
+          "aria-checked": ariaChecked,
+          className: cn(
+            "relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-left text-xs outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+            inset && "pl-8",
+            variant === "destructive" && MENU_ITEM_DESTRUCTIVE_TOUCH_CLASS,
+            className
+          ),
+          "data-disabled": disabled ? "" : void 0,
+          onClick: () => {
+            if (disabled) return;
+            const event = createSelectEvent();
+            onSelect?.(event);
+            if (!event.defaultPrevented) {
+              onOpenChange(false);
+            }
+          },
+          children
+        }
+      );
+    }
+    return /* @__PURE__ */ jsx(
+      Item,
+      {
+        ref,
+        className: cn(
+          "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-xs outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+          LIST_HOVER_TRANSITION,
+          variant === "destructive" ? MENU_ITEM_DESTRUCTIVE_STATE_CLASS : MENU_ITEM_NEUTRAL_STATE_CLASS,
+          inset && "pl-8",
+          className
+        ),
+        disabled,
+        role,
+        "aria-checked": ariaChecked,
+        onSelect,
+        textValue: _textValue,
+        ...domProps,
+        ...hoverProps,
+        children
+      }
+    );
+  }
+);
+DropdownMenuItem2.displayName = "DropdownMenuItem";
+var DropdownMenuCheckboxItem2 = forwardRef(
+  ({
+    className,
+    children,
+    checked,
+    onSelect,
+    onCheckedChange,
+    disabled,
+    textValue: _textValue,
+    onPointerEnter: callerPointerEnter,
+    onKeyDown: callerKeyDown,
+    ...domProps
+  }, ref) => {
+    const { isCompactViewport, onOpenChange } = useResponsiveMenu();
+    const { hoverProps } = useMenuItemHover({
+      onPointerEnter: callerPointerEnter,
+      onKeyDown: callerKeyDown
+    });
+    if (isCompactViewport) {
+      return /* @__PURE__ */ jsxs(
+        "button",
+        {
+          ref,
+          type: "button",
+          role: "menuitemcheckbox",
+          "aria-checked": checked === "indeterminate" ? "mixed" : checked === true,
+          disabled,
+          "aria-disabled": disabled || void 0,
+          className: cn(
+            "relative flex w-full cursor-default select-none items-center rounded-sm py-2 pl-2 pr-8 text-left text-xs outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            className
+          ),
+          "data-disabled": disabled ? "" : void 0,
+          onClick: () => {
+            if (disabled) return;
+            const event = createSelectEvent();
+            onSelect?.(event);
+            onCheckedChange?.(checked === "indeterminate" ? true : !checked);
+            if (!event.defaultPrevented) {
+              onOpenChange(false);
+            }
+          },
+          children: [
+            /* @__PURE__ */ jsx(
+              "span",
+              {
+                className: cn(
+                  "absolute right-2 flex items-center justify-center",
+                  COARSE_POINTER_CHECK_SLOT_CLASS
+                ),
+                children: (checked === true || checked === "indeterminate") && /* @__PURE__ */ jsx(Icon, { name: "Check", className: COARSE_POINTER_CHECK_SLOT_CLASS })
+              }
+            ),
+            children
+          ]
+        }
+      );
+    }
+    return /* @__PURE__ */ jsxs(
+      CheckboxItem,
+      {
+        ref,
+        className: cn(
+          "relative flex cursor-default select-none items-center rounded-sm py-[0.3125rem] pl-2 pr-8 text-xs outline-none focus:bg-state-hover focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+          LIST_HOVER_TRANSITION,
+          MENU_ITEM_LAST_HOVERED_CLASS,
+          className
+        ),
+        checked,
+        onSelect,
+        onCheckedChange,
+        disabled,
+        textValue: _textValue,
+        ...domProps,
+        ...hoverProps,
+        children: [
+          /* @__PURE__ */ jsx(
+            "span",
+            {
+              className: cn(
+                "absolute right-2 flex items-center justify-center",
+                COARSE_POINTER_CHECK_SLOT_CLASS
+              ),
+              children: /* @__PURE__ */ jsx(ItemIndicator, { children: /* @__PURE__ */ jsx(Icon, { name: "Check", className: COARSE_POINTER_CHECK_SLOT_CLASS }) })
+            }
+          ),
+          children
+        ]
+      }
+    );
+  }
+);
+DropdownMenuCheckboxItem2.displayName = "DropdownMenuCheckboxItem";
+var DropdownMenuRadioItem2 = forwardRef(
+  ({
+    className,
+    children,
+    onPointerEnter: callerPointerEnter,
+    onKeyDown: callerKeyDown,
+    ...props
+  }, ref) => {
+    const { isCompactViewport } = useResponsiveMenu();
+    const { hoverProps } = useMenuItemHover({
+      onPointerEnter: callerPointerEnter,
+      onKeyDown: callerKeyDown
+    });
+    if (isCompactViewport) {
+      return null;
+    }
+    return /* @__PURE__ */ jsxs(
+      RadioItem,
+      {
+        ref,
+        className: cn(
+          "relative flex cursor-default select-none items-center rounded-sm py-[0.3125rem] pl-8 pr-2 text-xs outline-none focus:bg-state-hover focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+          LIST_HOVER_TRANSITION,
+          MENU_ITEM_LAST_HOVERED_CLASS,
+          className
+        ),
+        ...props,
+        ...hoverProps,
+        children: [
+          /* @__PURE__ */ jsx("span", { className: "absolute left-2 flex h-3.5 w-3.5 items-center justify-center", children: /* @__PURE__ */ jsx(ItemIndicator, { children: /* @__PURE__ */ jsx(Icon, { name: "Circle", className: "h-2 w-2 fill-current" }) }) }),
+          children
+        ]
+      }
+    );
+  }
+);
+DropdownMenuRadioItem2.displayName = RadioItem.displayName;
+var DropdownMenuLabel2 = forwardRef(({ className, inset, children, ...props }, ref) => {
+  const { isCompactViewport } = useResponsiveMenu();
+  if (isCompactViewport) {
+    return /* @__PURE__ */ jsx(
+      "div",
+      {
+        ref,
+        className: cn(
+          "px-2 py-1.5 text-xs font-medium text-muted-foreground",
+          inset && "pl-8",
+          className
+        ),
+        children
+      }
+    );
+  }
+  return /* @__PURE__ */ jsx(
+    Label,
+    {
+      ref,
+      className: cn(
+        "px-2 py-[0.3125rem] text-xs font-medium text-muted-foreground",
+        inset && "pl-8",
+        className
+      ),
+      ...props,
+      children
+    }
+  );
+});
+DropdownMenuLabel2.displayName = "DropdownMenuLabel";
+var DropdownMenuSeparator2 = forwardRef(({ className, ...props }, ref) => {
+  const { isCompactViewport } = useResponsiveMenu();
+  if (isCompactViewport) {
+    return /* @__PURE__ */ jsx(
+      "hr",
+      {
+        ref,
+        className: cn("-mx-1 my-1 h-px border-0 bg-muted", className)
+      }
+    );
+  }
+  return /* @__PURE__ */ jsx(
+    Separator,
+    {
+      ref,
+      className: cn("-mx-1 my-1 h-px bg-muted", className),
+      ...props
+    }
+  );
+});
+DropdownMenuSeparator2.displayName = "DropdownMenuSeparator";
+var DropdownMenuGroup2 = forwardRef(({ children, ...props }, ref) => {
+  const { isCompactViewport } = useResponsiveMenu();
+  if (isCompactViewport) {
+    return /* @__PURE__ */ jsx("div", { ref, role: "group", ...props, children });
+  }
+  return /* @__PURE__ */ jsx(Group, { ref, ...props, children });
+});
+DropdownMenuGroup2.displayName = "DropdownMenuGroup";
+var DropdownMenuSubTrigger2 = forwardRef(
+  ({
+    className,
+    inset,
+    children,
+    onPointerEnter: callerPointerEnter,
+    onKeyDown: callerKeyDown,
+    ...props
+  }, ref) => {
+    const { hoverProps } = useMenuItemHover({
+      onPointerEnter: callerPointerEnter,
+      onKeyDown: callerKeyDown
+    });
+    return /* @__PURE__ */ jsxs(
+      SubTrigger,
+      {
+        ref,
+        className: cn(
+          "flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-[0.3125rem] text-xs outline-none focus:bg-state-hover focus:text-foreground data-[state=open]:bg-state-active data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+          LIST_HOVER_TRANSITION,
+          MENU_ITEM_LAST_HOVERED_CLASS,
+          inset && "pl-8",
+          className
+        ),
+        ...props,
+        ...hoverProps,
+        children: [
+          children,
+          /* @__PURE__ */ jsx(Icon, { name: "ChevronRight", className: "ml-auto" })
+        ]
+      }
+    );
+  }
+);
+DropdownMenuSubTrigger2.displayName = SubTrigger.displayName;
+var DropdownMenuSubContent2 = forwardRef(({ className, ...props }, ref) => /* @__PURE__ */ jsx(
+  SubContent,
+  {
+    ref,
+    ...usePortalScopeProps(),
+    className: cn(
+      "z-50 min-w-28 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      className
+    ),
+    ...props
+  }
+));
+DropdownMenuSubContent2.displayName = SubContent.displayName;
+var DropdownMenuShortcut = ({
+  className,
+  ...props
+}) => {
+  return /* @__PURE__ */ jsx(
+    "span",
+    {
+      className: cn("ml-auto text-xs tracking-widest opacity-60", className),
+      ...props
+    }
+  );
+};
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
+
 // app.tsx
 var MIN_ZOOM = 0.02;
 var MAX_ZOOM = 2;
@@ -4841,9 +6093,83 @@ function nodeClass(node) {
     node.status === "done" && "opacity-40"
   );
 }
-function StoryNode({ node }) {
-  const content = /* @__PURE__ */ jsxs(Fragment2, { children: [
-    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+function startWorkBlockedReason(node, mutationsEnabled) {
+  if (!mutationsEnabled) {
+    return "Enable agent mutations in Extensions \u2192 Plugins \u2192 Shortcut Agent to claim Stories.";
+  }
+  if (node.status === "blocked" || node.blocked) return "This Story is blocked.";
+  if (node.status === "ready") return null;
+  return `This Story is in ${node.stateName} and is not claimable.`;
+}
+function StoryMenu({
+  node,
+  mutationsEnabled,
+  starting,
+  onStartWork
+}) {
+  const blockedReason = startWorkBlockedReason(node, mutationsEnabled);
+  async function copyId() {
+    const id = `sc-${node.id}`;
+    try {
+      await navigator.clipboard.writeText(id);
+      toast.success(`Copied ${id}`);
+    } catch {
+      toast.error(`Could not copy ${id}`);
+    }
+  }
+  return /* @__PURE__ */ jsxs(DropdownMenu2, { children: [
+    /* @__PURE__ */ jsx(DropdownMenuTrigger2, { asChild: true, children: /* @__PURE__ */ jsx(
+      "button",
+      {
+        type: "button",
+        "aria-label": `Actions for sc-${node.id}`,
+        title: "Story actions",
+        className: "relative z-10 -my-0.5 -mr-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-sm leading-none text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        children: /* @__PURE__ */ jsx("span", { "aria-hidden": "true", children: "\u2026" })
+      }
+    ) }),
+    /* @__PURE__ */ jsxs(DropdownMenuContent2, { align: "end", mobileTitle: `Actions for sc-${node.id}`, children: [
+      /* @__PURE__ */ jsx(
+        DropdownMenuItem2,
+        {
+          disabled: starting || blockedReason !== null,
+          title: blockedReason ?? void 0,
+          onSelect: onStartWork,
+          children: starting ? "Starting\u2026" : "Start work in bb"
+        }
+      ),
+      /* @__PURE__ */ jsx(DropdownMenuItem2, { onSelect: () => void copyId(), children: "Copy ID" }),
+      node.url ? /* @__PURE__ */ jsxs(Fragment2, { children: [
+        /* @__PURE__ */ jsx(DropdownMenuSeparator2, {}),
+        /* @__PURE__ */ jsx(
+          DropdownMenuItem2,
+          {
+            onSelect: () => window.open(node.url, "_blank", "noopener,noreferrer"),
+            children: "Open in Shortcut"
+          }
+        )
+      ] }) : null
+    ] })
+  ] });
+}
+function StoryNode({
+  node,
+  mutationsEnabled,
+  starting,
+  onStartWork
+}) {
+  return /* @__PURE__ */ jsxs("div", { className: cn(nodeClass(node), "relative"), children: [
+    node.url ? /* @__PURE__ */ jsx(
+      "a",
+      {
+        className: "absolute inset-0 rounded-lg",
+        href: node.url,
+        target: "_blank",
+        rel: "noreferrer",
+        "aria-label": `Open sc-${node.id}: ${node.title} in Shortcut`
+      }
+    ) : null,
+    /* @__PURE__ */ jsxs("div", { className: "relative flex items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxs("span", { className: "font-mono text-[11px] text-muted-foreground", children: [
         "sc-",
         node.id
@@ -4859,31 +6185,28 @@ function StoryNode({ node }) {
             ),
             children: STATUS_LABELS[node.status]
           }
+        ),
+        /* @__PURE__ */ jsx(
+          StoryMenu,
+          {
+            node,
+            mutationsEnabled,
+            starting,
+            onStartWork
+          }
         )
       ] })
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "mt-1.5 break-words text-sm font-medium leading-snug", children: node.title }),
-    /* @__PURE__ */ jsxs("div", { className: "mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-[11px] text-muted-foreground", children: [
+    /* @__PURE__ */ jsx("div", { className: "pointer-events-none mt-1.5 break-words text-sm font-medium leading-snug", children: node.title }),
+    /* @__PURE__ */ jsxs("div", { className: "pointer-events-none relative mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-[11px] text-muted-foreground", children: [
       /* @__PURE__ */ jsx("span", { className: "truncate", children: node.owners.join(", ") || node.stateName }),
-      node.externalBlockedBy.length > 0 ? /* @__PURE__ */ jsxs("span", { className: "shrink-0 text-destructive", title: `External blockers: ${node.externalBlockedBy.join(", ")}`, children: [
+      node.externalBlockedBy.length > 0 ? /* @__PURE__ */ jsxs("span", { className: "pointer-events-auto shrink-0 text-destructive", title: `External blockers: ${node.externalBlockedBy.join(", ")}`, children: [
         "+",
         node.externalBlockedBy.length,
         " external"
       ] }) : null
     ] })
   ] });
-  if (!node.url) return /* @__PURE__ */ jsx("div", { className: nodeClass(node), children: content });
-  return /* @__PURE__ */ jsx(
-    "a",
-    {
-      className: nodeClass(node),
-      href: node.url,
-      target: "_blank",
-      rel: "noreferrer",
-      "aria-label": `Open sc-${node.id}: ${node.title} in Shortcut`,
-      children: content
-    }
-  );
 }
 function Count({ label, value, tone }) {
   return /* @__PURE__ */ jsxs("div", { className: "flex items-baseline gap-1.5", children: [
@@ -4966,6 +6289,7 @@ function EpicGraph({ subPath }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [startingStoryId, setStartingStoryId] = useState(null);
   const [zoom, setZoom] = useState(1);
   const graphScrollerRef = useRef(null);
   const load = useCallback(async () => {
@@ -4985,6 +6309,22 @@ function EpicGraph({ subPath }) {
       setLoading(false);
     }
   }, [projectId, requestedEpicId, rpc]);
+  const startWork = useCallback(
+    async (storyId, epicId) => {
+      setStartingStoryId(storyId);
+      try {
+        const result = await rpc.call("startWork", { storyId, projectId, epicId });
+        toast.success(`Opened a bb thread for sc-${result.storyId}`);
+        navigate.toThread(result.threadId);
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : String(cause));
+        void load();
+      } finally {
+        setStartingStoryId(null);
+      }
+    },
+    [load, navigate, projectId, rpc]
+  );
   useEffect(() => {
     if (routeEpicId !== null) {
       setRememberedEpicId(null);
@@ -5267,7 +6607,15 @@ function EpicGraph({ subPath }) {
               y: node.y,
               width: node.width,
               height: node.height,
-              children: /* @__PURE__ */ jsx("div", { className: "h-full p-1", children: /* @__PURE__ */ jsx(StoryNode, { node }) })
+              children: /* @__PURE__ */ jsx("div", { className: "h-full p-1", children: /* @__PURE__ */ jsx(
+                StoryNode,
+                {
+                  node,
+                  mutationsEnabled: data.mutationsEnabled,
+                  starting: startingStoryId === node.id,
+                  onStartWork: () => void startWork(node.id, data.epic.id)
+                }
+              ) })
             },
             node.id
           ))

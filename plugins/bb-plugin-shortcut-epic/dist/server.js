@@ -14966,6 +14966,8 @@ var COMMANDS = {
       ["--estimate N", "Set a positive integer estimate"],
       ["--blocked-by ID", "Existing Story blocks this Story (repeatable)"],
       ["--blocks ID", "This Story blocks an existing Story (repeatable)"],
+      ["--duplicates ID", "This Story duplicates an existing Story (repeatable)"],
+      ["--duplicated-by ID", "An existing Story duplicates this Story (repeatable)"],
       ["--related-to ID", "Add a non-blocking relation (repeatable)"]
     ]
   },
@@ -15053,34 +15055,47 @@ var COMMANDS = {
     ]
   },
   dep: {
-    description: "Adds or removes a Story dependency or related-Story link.",
+    description: "Adds or removes one Story dependency, duplicate, or related-Story link.",
     usage: [
-      "dep add STORY --blocked-by|--blocks|--related-to OTHER",
-      "dep remove STORY --blocked-by|--blocks|--related-to OTHER"
+      "dep add|remove STORY --blocked-by|--blocks OTHER",
+      "dep add|remove STORY --duplicates|--duplicated-by OTHER",
+      "dep add|remove STORY --related-to OTHER"
     ],
     options: [
       ["--blocked-by ID", "The other Story blocks STORY"],
       ["--blocks ID", "STORY blocks the other Story"],
+      ["--duplicates ID", "STORY duplicates the other Story"],
+      ["--duplicated-by ID", "The other Story duplicates STORY"],
       ["--related-to ID", "Add or remove a non-blocking relation"],
       ["--allow-cross-epic", "Allow a relationship between different Epics"]
     ]
   },
   "dep add": {
-    description: "Adds one dependency or related-Story link.",
-    usage: ["dep add STORY --blocked-by|--blocks|--related-to OTHER"],
+    description: "Adds one dependency, duplicate, or related-Story link.",
+    usage: [
+      "dep add STORY --blocked-by|--blocks OTHER",
+      "dep add STORY --duplicates|--duplicated-by|--related-to OTHER"
+    ],
     options: [
       ["--blocked-by ID", "The other Story blocks STORY"],
       ["--blocks ID", "STORY blocks the other Story"],
+      ["--duplicates ID", "STORY duplicates the other Story"],
+      ["--duplicated-by ID", "The other Story duplicates STORY"],
       ["--related-to ID", "Add a non-blocking relation"],
       ["--allow-cross-epic", "Allow a relationship between different Epics"]
     ]
   },
   "dep remove": {
-    description: "Removes one matching dependency or related-Story link.",
-    usage: ["dep remove STORY --blocked-by|--blocks|--related-to OTHER"],
+    description: "Removes one matching dependency, duplicate, or related-Story link.",
+    usage: [
+      "dep remove STORY --blocked-by|--blocks OTHER",
+      "dep remove STORY --duplicates|--duplicated-by|--related-to OTHER"
+    ],
     options: [
       ["--blocked-by ID", "The other Story blocks STORY"],
       ["--blocks ID", "STORY blocks the other Story"],
+      ["--duplicates ID", "STORY duplicates the other Story"],
+      ["--duplicated-by ID", "The other Story duplicates STORY"],
       ["--related-to ID", "Remove a non-blocking relation"],
       ["--allow-cross-epic", "Allow a relationship between different Epics"]
     ]
@@ -15115,7 +15130,7 @@ var COMMAND_USAGE = [
   "cancel STORY --reason TEXT",
   "release STORY --reason TEXT",
   "handoff STORY --summary TEXT [--release]",
-  "dep add|remove STORY --blocked-by|--blocks|--related-to OTHER",
+  "dep add|remove STORY RELATION OTHER",
   "claims [--mine|--held-by ID] [--stale] [--stale-minutes N]",
   "context"
 ];
@@ -15502,6 +15517,12 @@ function summarizeStory(story, statesById, { includeDescription = false } = {}) 
     position: story.position,
     blocked_by: links.filter((link2) => link2.verb === "blocks" && link2.objectId === Number(story.id)).map((link2) => link2.subjectId),
     blocks: links.filter((link2) => link2.verb === "blocks" && link2.subjectId === Number(story.id)).map((link2) => link2.objectId),
+    duplicates: links.filter(
+      (link2) => link2.verb === "duplicates" && link2.subjectId === Number(story.id)
+    ).map((link2) => link2.objectId),
+    duplicated_by: links.filter(
+      (link2) => link2.verb === "duplicates" && link2.objectId === Number(story.id)
+    ).map((link2) => link2.subjectId),
     related_to: links.filter((link2) => link2.verb === "relates to").map(
       (link2) => link2.subjectId === Number(story.id) ? link2.objectId : link2.subjectId
     ),
@@ -15971,6 +15992,14 @@ async function createCommand(parsed, { client, config: config2, stdin }) {
       object_story_id: id,
       verb: "blocks"
     })),
+    ...storyIds(parsed.options, "duplicates").map((id) => ({
+      object_story_id: id,
+      verb: "duplicates"
+    })),
+    ...storyIds(parsed.options, "duplicated-by").map((id) => ({
+      subject_story_id: id,
+      verb: "duplicates"
+    })),
     ...storyIds(parsed.options, "related-to").map((id) => ({
       object_story_id: id,
       verb: "relates to"
@@ -16275,6 +16304,18 @@ function dependencySpec(parsed, storyId) {
       verb: "blocks",
       relation: "blocks"
     })),
+    ...storyIds(parsed.options, "duplicates").map((target) => ({
+      subjectId: storyId,
+      objectId: target,
+      verb: "duplicates",
+      relation: "duplicates"
+    })),
+    ...storyIds(parsed.options, "duplicated-by").map((target) => ({
+      subjectId: target,
+      objectId: storyId,
+      verb: "duplicates",
+      relation: "duplicated-by"
+    })),
     ...storyIds(parsed.options, "related-to").map((target) => ({
       subjectId: storyId,
       objectId: target,
@@ -16284,7 +16325,7 @@ function dependencySpec(parsed, storyId) {
   ];
   if (entries.length !== 1) {
     throw argumentError(
-      "dep requires exactly one --blocked-by, --blocks, or --related-to Story ID"
+      "dep requires exactly one --blocked-by, --blocks, --duplicates, --duplicated-by, or --related-to Story ID"
     );
   }
   return entries[0];
@@ -16806,6 +16847,7 @@ var graphResponseSchema = external_exports.object({
   edges: external_exports.array(graphEdgeSchema),
   warnings: external_exports.array(external_exports.string()),
   configuredEpicId: external_exports.number().int().nullable(),
+  mutationsEnabled: external_exports.boolean(),
   generatedAt: external_exports.string()
 });
 var rpcContract = defineRpcContract({
@@ -16815,8 +16857,74 @@ var rpcContract = defineRpcContract({
       epicId: external_exports.number().int().positive().nullable().optional()
     }).strict(),
     output: graphResponseSchema
+  },
+  startWork: {
+    input: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      projectId: external_exports.string().nullable(),
+      epicId: external_exports.number().int().positive().nullable().optional()
+    }).strict(),
+    output: external_exports.object({
+      threadId: external_exports.string().min(1),
+      storyId: external_exports.number().int().positive(),
+      title: external_exports.string()
+    }).strict()
   }
 });
+var shownStorySchema = external_exports.object({
+  story: external_exports.object({
+    id: external_exports.number().int(),
+    title: external_exports.string().nullish(),
+    app_url: external_exports.string().nullish(),
+    description: external_exports.string().nullish()
+  })
+});
+function cliFailure(payload, fallback) {
+  const error51 = payload.error;
+  if (error51 && typeof error51 === "object" && "message" in error51) {
+    return new Error(String(error51.message));
+  }
+  return new Error(fallback);
+}
+function startWorkPrompt({
+  storyId,
+  title,
+  url: url2,
+  epicId,
+  description
+}) {
+  const body = description.trim() || "_This Story has no description._";
+  return [
+    `# sc-${storyId}: ${title}`,
+    "",
+    url2 ? `Shortcut: ${url2}` : null,
+    `Epic: ${epicId}`,
+    "",
+    "## Description",
+    "",
+    body,
+    "",
+    "---",
+    "",
+    "This Story is not claimed yet. Claim it before you change anything, so no",
+    "other agent picks it up:",
+    "",
+    `    bb shortcut-agent start ${storyId} --epic ${epicId}`,
+    "",
+    "Exit code 4 with `claim_conflict` means another agent claimed it first \u2014 stop",
+    "and report that instead of implementing it anyway. Exit code 3 with",
+    "`agent_mutations_disabled` means the bb plugin setting is off.",
+    "",
+    "Once you own it, implement it from the description above. When the work is",
+    "done and verified:",
+    "",
+    `    bb shortcut-agent complete ${storyId} --summary '<what changed>' --verification '<how it was checked>'`,
+    "",
+    "If you cannot proceed, hand the Story back instead of leaving it claimed:",
+    "",
+    `    bb shortcut-agent release ${storyId} --reason '<why>'`
+  ].filter((line) => line !== null).join("\n");
+}
 function statusByStoryId(stories, states) {
   const groups = classifyStories(stories, states);
   const statuses = /* @__PURE__ */ new Map();
@@ -16872,7 +16980,7 @@ async function plugin(bb) {
       { name: "cancel", summary: "Cancel a Story with a reason (mutations must be enabled)", usage: "bb shortcut-agent cancel STORY --reason TEXT" },
       { name: "release", summary: "Release an owned Story back to Ready (mutations must be enabled)", usage: "bb shortcut-agent release STORY --reason TEXT" },
       { name: "handoff", summary: "Record progress and optionally release a Story (mutations must be enabled)", usage: "bb shortcut-agent handoff STORY --summary TEXT [--release]" },
-      { name: "dep", summary: "Add or remove one Story relationship (mutations must be enabled)", usage: "bb shortcut-agent dep add|remove STORY --blocked-by|--blocks|--related-to OTHER" },
+      { name: "dep", summary: "Add or remove one Story relationship (mutations must be enabled)", usage: "bb shortcut-agent dep add|remove STORY --blocked-by|--blocks|--duplicates|--duplicated-by|--related-to OTHER" },
       { name: "claims", summary: "List in-flight or stale claims", usage: "bb shortcut-agent claims [--stale] [--stale-minutes N]" },
       { name: "config", summary: "Show effective bb project Shortcut Agent configuration", usage: "bb shortcut-agent config" },
       { name: "doctor", summary: "Check Shortcut connectivity and project configuration", usage: "bb shortcut-agent doctor" }
@@ -16917,7 +17025,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
   ];
   bb.agents.configure(() => ({
     tools: mutationsEnabled ? [...readToolNames, ...mutationToolNames] : readToolNames,
-    skills: []
+    skills: mutationsEnabled ? ["agent-next-ready"] : []
   }));
   bb.agents.registerTool({
     name: "shortcut_agent_context",
@@ -16957,6 +17065,8 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       estimate: external_exports.number().int().positive().optional(),
       blockedBy: external_exports.array(external_exports.number().int().positive()).optional(),
       blocks: external_exports.array(external_exports.number().int().positive()).optional(),
+      duplicates: external_exports.array(external_exports.number().int().positive()).optional(),
+      duplicatedBy: external_exports.array(external_exports.number().int().positive()).optional(),
       relatedTo: external_exports.array(external_exports.number().int().positive()).optional(),
       epicId: external_exports.number().int().positive().optional()
     }).strict(),
@@ -16968,6 +17078,8 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       if (input.epicId) argv.push("--epic", String(input.epicId));
       for (const id of input.blockedBy ?? []) argv.push("--blocked-by", String(id));
       for (const id of input.blocks ?? []) argv.push("--blocks", String(id));
+      for (const id of input.duplicates ?? []) argv.push("--duplicates", String(id));
+      for (const id of input.duplicatedBy ?? []) argv.push("--duplicated-by", String(id));
       for (const id of input.relatedTo ?? []) argv.push("--related-to", String(id));
       return shortcut.executeTool(argv, context);
     }
@@ -17002,10 +17114,10 @@ bb integration: project scope and API origin are server-controlled; init, --conf
   });
   bb.agents.registerTool({
     name: "shortcut_agent_add_dependency",
-    description: "Add one blocks, blocked-by, or related-to relationship between Shortcut Stories, preserving the CLI's cycle and cross-Epic safety checks. Requires Enable agent mutations.",
+    description: "Add one blocks, blocked-by, duplicates, duplicated-by, or related-to relationship between Shortcut Stories, preserving the CLI's cycle and cross-Epic safety checks. Requires Enable agent mutations.",
     parameters: external_exports.object({
       storyId: external_exports.number().int().positive(),
-      relation: external_exports.enum(["blocked-by", "blocks", "related-to"]),
+      relation: external_exports.enum(["blocked-by", "blocks", "duplicates", "duplicated-by", "related-to"]),
       otherStoryId: external_exports.number().int().positive(),
       allowCrossEpic: external_exports.boolean().optional()
     }).strict(),
@@ -17203,8 +17315,52 @@ bb integration: project scope and API origin are server-controlled; init, --conf
         edges,
         warnings,
         configuredEpicId: configured.config.epic_id ?? null,
+        mutationsEnabled: current.enableAgentMutations,
         generatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
+    },
+    async startWork({ storyId, projectId, epicId }) {
+      const current = await settings.get();
+      const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
+      if (!token) {
+        throw new Error(
+          "Shortcut API token is not configured. Set it in Extensions \u2192 Plugins \u2192 Shortcut Agent."
+        );
+      }
+      if (!current.enableAgentMutations) {
+        throw new Error(
+          "The agent has to claim the Story before working it. Enable agent mutations in Extensions \u2192 Plugins \u2192 Shortcut Agent first."
+        );
+      }
+      const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const selectedEpicId = epicId ?? configured.config.epic_id;
+      if (!selectedEpicId) {
+        throw new Error(
+          "No Epic is selected. Enter an Epic ID in the panel or add epic_id to .shortcut-agent.json."
+        );
+      }
+      const detail = await shortcut.execute(["show", String(storyId)], {
+        projectId: configured.project.id
+      });
+      if (detail.exitCode !== 0) {
+        throw cliFailure(detail.payload, `Could not read Story ${storyId}.`);
+      }
+      const shown = shownStorySchema.safeParse(detail.payload);
+      const story = shown.success ? shown.data.story : null;
+      const title = story?.title ?? `Story ${storyId}`;
+      const thread = await bb.sdk.threads.spawn({
+        projectId: configured.project.id,
+        environment: { type: "project-default" },
+        title: `sc-${storyId}: ${title}`,
+        prompt: startWorkPrompt({
+          storyId,
+          title,
+          url: story?.app_url ?? null,
+          epicId: Number(selectedEpicId),
+          description: story?.description ?? ""
+        })
+      });
+      return { threadId: thread.id, storyId, title };
     }
   });
 }

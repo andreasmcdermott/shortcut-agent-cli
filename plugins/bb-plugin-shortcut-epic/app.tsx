@@ -14,7 +14,15 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { GraphResponse, rpcContract } from "./server";
 import { layoutGraph, type GraphNode, type NodeStatus } from "./graph.js";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
@@ -48,10 +56,97 @@ function nodeClass(node: GraphNode) {
   );
 }
 
-function StoryNode({ node }: { node: GraphNode }) {
-  const content = (
-    <>
-      <div className="flex items-center justify-between gap-2">
+function startWorkBlockedReason(node: GraphNode, mutationsEnabled: boolean) {
+  if (!mutationsEnabled) {
+    return "Enable agent mutations in Extensions → Plugins → Shortcut Agent to claim Stories.";
+  }
+  if (node.status === "blocked" || node.blocked) return "This Story is blocked.";
+  if (node.status === "ready") return null;
+  return `This Story is in ${node.stateName} and is not claimable.`;
+}
+
+function StoryMenu({
+  node,
+  mutationsEnabled,
+  starting,
+  onStartWork,
+}: {
+  node: GraphNode;
+  mutationsEnabled: boolean;
+  starting: boolean;
+  onStartWork: () => void;
+}) {
+  const blockedReason = startWorkBlockedReason(node, mutationsEnabled);
+
+  async function copyId() {
+    const id = `sc-${node.id}`;
+    try {
+      await navigator.clipboard.writeText(id);
+      toast.success(`Copied ${id}`);
+    } catch {
+      toast.error(`Could not copy ${id}`);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Actions for sc-${node.id}`}
+          title="Story actions"
+          className="relative z-10 -my-0.5 -mr-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-sm leading-none text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span aria-hidden="true">…</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" mobileTitle={`Actions for sc-${node.id}`}>
+        <DropdownMenuItem
+          disabled={starting || blockedReason !== null}
+          title={blockedReason ?? undefined}
+          onSelect={onStartWork}
+        >
+          {starting ? "Starting…" : "Start work in bb"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void copyId()}>Copy ID</DropdownMenuItem>
+        {node.url ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => window.open(node.url!, "_blank", "noopener,noreferrer")}
+            >
+              Open in Shortcut
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function StoryNode({
+  node,
+  mutationsEnabled,
+  starting,
+  onStartWork,
+}: {
+  node: GraphNode;
+  mutationsEnabled: boolean;
+  starting: boolean;
+  onStartWork: () => void;
+}) {
+  return (
+    <div className={cn(nodeClass(node), "relative")}>
+      {node.url ? (
+        <a
+          className="absolute inset-0 rounded-lg"
+          href={node.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open sc-${node.id}: ${node.title} in Shortcut`}
+        />
+      ) : null}
+      <div className="relative flex items-center justify-between gap-2">
         <span className="font-mono text-[11px] text-muted-foreground">sc-{node.id}</span>
         <div className="flex items-center gap-1">
           {node.blocked && node.isActive ? (
@@ -67,31 +162,26 @@ function StoryNode({ node }: { node: GraphNode }) {
           >
             {STATUS_LABELS[node.status]}
           </span>
+          <StoryMenu
+            node={node}
+            mutationsEnabled={mutationsEnabled}
+            starting={starting}
+            onStartWork={onStartWork}
+          />
         </div>
       </div>
-      <div className="mt-1.5 break-words text-sm font-medium leading-snug">{node.title}</div>
-      <div className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-[11px] text-muted-foreground">
+      <div className="pointer-events-none mt-1.5 break-words text-sm font-medium leading-snug">
+        {node.title}
+      </div>
+      <div className="pointer-events-none relative mt-auto flex min-w-0 items-center justify-between gap-2 pt-2 text-[11px] text-muted-foreground">
         <span className="truncate">{node.owners.join(", ") || node.stateName}</span>
         {node.externalBlockedBy.length > 0 ? (
-          <span className="shrink-0 text-destructive" title={`External blockers: ${node.externalBlockedBy.join(", ")}`}>
+          <span className="pointer-events-auto shrink-0 text-destructive" title={`External blockers: ${node.externalBlockedBy.join(", ")}`}>
             +{node.externalBlockedBy.length} external
           </span>
         ) : null}
       </div>
-    </>
-  );
-
-  if (!node.url) return <div className={nodeClass(node)}>{content}</div>;
-  return (
-    <a
-      className={nodeClass(node)}
-      href={node.url}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={`Open sc-${node.id}: ${node.title} in Shortcut`}
-    >
-      {content}
-    </a>
+    </div>
   );
 }
 
@@ -206,6 +296,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [startingStoryId, setStartingStoryId] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const graphScrollerRef = useRef<HTMLDivElement>(null);
 
@@ -226,6 +317,23 @@ function EpicGraph({ subPath }: { subPath: string }) {
       setLoading(false);
     }
   }, [projectId, requestedEpicId, rpc]);
+
+  const startWork = useCallback(
+    async (storyId: number, epicId: number) => {
+      setStartingStoryId(storyId);
+      try {
+        const result = await rpc.call("startWork", { storyId, projectId, epicId });
+        toast.success(`Opened a bb thread for sc-${result.storyId}`);
+        navigate.toThread(result.threadId);
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : String(cause));
+        void load();
+      } finally {
+        setStartingStoryId(null);
+      }
+    },
+    [load, navigate, projectId, rpc],
+  );
 
   useEffect(() => {
     if (routeEpicId !== null) {
@@ -532,7 +640,12 @@ function EpicGraph({ subPath }: { subPath: string }) {
                 height={node.height}
               >
                 <div className="h-full p-1">
-                  <StoryNode node={node} />
+                  <StoryNode
+                    node={node}
+                    mutationsEnabled={data.mutationsEnabled}
+                    starting={startingStoryId === node.id}
+                    onStartWork={() => void startWork(node.id, data.epic.id)}
+                  />
                 </div>
               </foreignObject>
             ))}

@@ -159,6 +159,7 @@ describe("Shortcut Agent plugin backend", () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "shortcut-epic",
       settings: { apiToken: "secret" },
+      agentSkillIds: ["agent-next-ready"],
       sdk: {
         projects: {
           get: async () => project,
@@ -211,6 +212,7 @@ describe("Shortcut Agent plugin backend", () => {
       "shortcut_agent_context",
       "shortcut_agent_show",
     ]);
+    expect(readOnly.skills).toEqual([]);
 
     const blocked = await harness.behavior.runCli(
       ["create", "--title", "Nope", "--description", "Disabled"],
@@ -233,6 +235,7 @@ describe("Shortcut Agent plugin backend", () => {
     await harness.behavior.setSettings({ enableAgentMutations: true });
     const writable = await harness.behavior.resolveAgentConfiguration(context);
     expect(writable.tools.map((tool) => tool.name)).toContain("shortcut_agent_start");
+    expect(writable.skills).toEqual(["agent-next-ready"]);
     await harness.lifecycle.dispose();
   });
 
@@ -326,6 +329,150 @@ describe("Shortcut Agent plugin backend", () => {
     expect(claimText).toContain('"agent_id":"bb:thread-123"');
     expect(claimText).toContain('"run_id":"thread-123"');
     expect(String(result)).not.toContain("secret-token");
+    await harness.lifecycle.dispose();
+  });
+
+  it("spawns a bb thread that claims the Story itself when the panel starts work", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/stories/7") && init?.method === "GET") {
+        return json({
+          entity: {
+            id: 7,
+            name: "Claim me",
+            description: "Implement the parser.",
+            app_url: "https://app.shortcut.com/acme/story/7",
+            epic: { id: 42 },
+            workflow_state: { id: 11 },
+            owners: { entities: [] },
+            story_links: { entities: [] },
+            blocked: false,
+            archived: false,
+          },
+        });
+      }
+      if (url.pathname.endsWith("/stories/7/comments") && init?.method === "GET") {
+        return json({ entities: [] });
+      }
+      if (url.pathname.endsWith("/workflow-states")) {
+        return json({
+          entities: [
+            { id: 11, name: "Ready", type: "unstarted" },
+            { id: 10, name: "In Progress", type: "started" },
+            { id: 12, name: "Done", type: "done" },
+          ],
+        });
+      }
+      throw new Error(`Unexpected Shortcut request: ${init?.method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const project = {
+      id: "proj_1",
+      kind: "standard" as const,
+      name: "Agent project",
+      gitRemoteUrl: null,
+      createdAt: 1,
+      updatedAt: 1,
+      sources: [],
+    };
+    const spawned: {
+      projectId: string;
+      title?: string;
+      prompt?: string;
+      environment?: { type: string };
+    }[] = [];
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "shortcut-epic",
+      settings: { apiToken: "secret-token", enableAgentMutations: true },
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async () => ({
+            content: JSON.stringify({
+              workspace: "acme",
+              epic_id: 42,
+              states: { ready: 11, started: 10, done: 12 },
+            }),
+            contentEncoding: "utf8" as const,
+            mimeType: "application/json",
+            sizeBytes: 100,
+          }),
+        },
+        threads: {
+          spawn: async (args) => {
+            spawned.push(args as (typeof spawned)[number]);
+            return { id: "thread_new" };
+          },
+        },
+      },
+    });
+    await plugin(bb);
+
+    const started = await harness.behavior.callRpc("startWork", {
+      storyId: 7,
+      projectId: "proj_1",
+      epicId: 42,
+    });
+    expect(started).toMatchObject({ threadId: "thread_new", storyId: 7, title: "Claim me" });
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]).toMatchObject({
+      projectId: "proj_1",
+      environment: { type: "project-default" },
+      title: "sc-7: Claim me",
+    });
+    const prompt = String(spawned[0]!.prompt);
+    expect(prompt).toContain("Implement the parser.");
+    expect(prompt).toContain("bb shortcut-agent start 7 --epic 42");
+    expect(prompt).toContain("bb shortcut-agent complete 7");
+    expect(prompt).not.toContain("secret-token");
+    expect(
+      fetchMock.mock.calls.every(([, init]) => (init?.method ?? "GET") === "GET"),
+    ).toBe(true);
+
+    await harness.lifecycle.dispose();
+  });
+
+  it("refuses to open a work thread while mutations are disabled", async () => {
+    const project = {
+      id: "proj_1",
+      kind: "standard" as const,
+      name: "Agent project",
+      gitRemoteUrl: null,
+      createdAt: 1,
+      updatedAt: 1,
+      sources: [],
+    };
+    const spawned: {
+      projectId: string;
+      title?: string;
+      prompt?: string;
+      environment?: { type: string };
+    }[] = [];
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "shortcut-epic",
+      settings: { apiToken: "secret-token" },
+      sdk: {
+        projects: { get: async () => project },
+        threads: {
+          spawn: async (args) => {
+            spawned.push(args as (typeof spawned)[number]);
+            return { id: "thread_new" };
+          },
+        },
+      },
+    });
+    await plugin(bb);
+
+    await expect(
+      harness.behavior.callRpc("startWork", {
+        storyId: 7,
+        projectId: "proj_1",
+        epicId: 42,
+      }),
+    ).rejects.toThrow(/Enable agent mutations/);
+    expect(spawned).toEqual([]);
+
     await harness.lifecycle.dispose();
   });
 });

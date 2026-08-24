@@ -67,6 +67,7 @@ const graph: GraphResponse = {
   edges: [{ source: 1, target: 2 }],
   warnings: [],
   configuredEpicId: 42,
+  mutationsEnabled: true,
   generatedAt: "2026-08-19T17:00:00.000Z",
 };
 
@@ -88,7 +89,14 @@ describe("Shortcut Agent nav panel", () => {
       { subPath: "" },
       {
         context: { projectId: "proj_1" },
-        rpc: { loadGraph: () => graph },
+        rpc: {
+          loadGraph: () => graph,
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
       },
     );
 
@@ -138,6 +146,83 @@ describe("Shortcut Agent nav panel", () => {
     slot.lifecycle.unmount();
   });
 
+  it("claims a ready Story from the card menu and opens the new thread", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const slot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      {
+        context: { projectId: "proj_1" },
+        rpc: {
+          loadGraph: () => graph,
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
+      },
+    );
+
+    await slot.findByText("Ship agent workflow");
+    fireEvent.pointerDown(
+      slot.getByRole("button", { name: "Actions for sc-2" }),
+      { button: 0, pointerType: "mouse" },
+    );
+
+    const startItem = await slot.findByRole("menuitem", { name: "Start work in bb" });
+    fireEvent.click(startItem);
+
+    await waitFor(() =>
+      expect(slot.inspection.rpcCalls).toContainEqual({
+        method: "startWork",
+        input: { storyId: 2, projectId: "proj_1", epicId: 42 },
+      }),
+    );
+    expect(slot.inspection.navigateCalls).toContainEqual({
+      method: "toThread",
+      threadId: "thread_1",
+    });
+
+    slot.lifecycle.unmount();
+  });
+
+  it("does not offer a claim for Stories that are not ready", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const slot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      {
+        context: { projectId: "proj_1" },
+        rpc: {
+          loadGraph: () => ({ ...graph, mutationsEnabled: false }),
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
+      },
+    );
+
+    await slot.findByText("Ship agent workflow");
+    fireEvent.pointerDown(
+      slot.getByRole("button", { name: "Actions for sc-1" }),
+      { button: 0, pointerType: "mouse" },
+    );
+
+    const startItem = await slot.findByRole("menuitem", { name: "Start work in bb" });
+    expect(startItem.getAttribute("data-disabled")).not.toBeNull();
+    fireEvent.click(startItem);
+    expect(
+      slot.inspection.rpcCalls.some((call) => call.method === "startWork"),
+    ).toBe(false);
+
+    slot.lifecycle.unmount();
+  });
+
   it("restores the last opened Epic for the current bb project", async () => {
     window.localStorage.setItem("shortcut-agent:last-epic:proj_1", "84");
     const app = await loadPluginApp(() => import("./app.js"));
@@ -147,7 +232,14 @@ describe("Shortcut Agent nav panel", () => {
       { subPath: "" },
       {
         context: { projectId: "proj_1" },
-        rpc: { loadGraph: () => graph },
+        rpc: {
+          loadGraph: () => graph,
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
       },
     );
 

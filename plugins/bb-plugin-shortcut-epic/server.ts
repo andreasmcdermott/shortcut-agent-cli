@@ -58,6 +58,7 @@ const graphResponseSchema = z.object({
   edges: z.array(graphEdgeSchema),
   warnings: z.array(z.string()),
   configuredEpicId: z.number().int().nullable(),
+  mutationsEnabled: z.boolean(),
   generatedAt: z.string(),
 });
 
@@ -73,7 +74,88 @@ export const rpcContract = defineRpcContract({
       .strict(),
     output: graphResponseSchema,
   },
+  startWork: {
+    input: z
+      .object({
+        storyId: z.number().int().positive(),
+        projectId: z.string().nullable(),
+        epicId: z.number().int().positive().nullable().optional(),
+      })
+      .strict(),
+    output: z
+      .object({
+        threadId: z.string().min(1),
+        storyId: z.number().int().positive(),
+        title: z.string(),
+      })
+      .strict(),
+  },
 });
+
+const shownStorySchema = z.object({
+  story: z.object({
+    id: z.number().int(),
+    title: z.string().nullish(),
+    app_url: z.string().nullish(),
+    description: z.string().nullish(),
+  }),
+});
+
+function cliFailure(payload: Record<string, unknown>, fallback: string) {
+  const error = payload.error;
+  if (error && typeof error === "object" && "message" in error) {
+    return new Error(String((error as { message: unknown }).message));
+  }
+  return new Error(fallback);
+}
+
+function startWorkPrompt({
+  storyId,
+  title,
+  url,
+  epicId,
+  description,
+}: {
+  storyId: number;
+  title: string;
+  url: string | null;
+  epicId: number;
+  description: string;
+}) {
+  const body = description.trim() || "_This Story has no description._";
+  return [
+    `# sc-${storyId}: ${title}`,
+    "",
+    url ? `Shortcut: ${url}` : null,
+    `Epic: ${epicId}`,
+    "",
+    "## Description",
+    "",
+    body,
+    "",
+    "---",
+    "",
+    "This Story is not claimed yet. Claim it before you change anything, so no",
+    "other agent picks it up:",
+    "",
+    `    bb shortcut-agent start ${storyId} --epic ${epicId}`,
+    "",
+    "Exit code 4 with `claim_conflict` means another agent claimed it first — stop",
+    "and report that instead of implementing it anyway. Exit code 3 with",
+    "`agent_mutations_disabled` means the bb plugin setting is off.",
+    "",
+    "Once you own it, implement it from the description above. When the work is",
+    "done and verified:",
+    "",
+    `    bb shortcut-agent complete ${storyId} --summary '<what changed>' --verification '<how it was checked>'`,
+    "",
+    "If you cannot proceed, hand the Story back instead of leaving it claimed:",
+    "",
+    `    bb shortcut-agent release ${storyId} --reason '<why>'`,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
 
 function statusByStoryId(
   stories: Parameters<typeof classifyStories>[0],
@@ -183,7 +265,7 @@ export default async function plugin(bb: BbPluginApi) {
   ];
   bb.agents.configure(() => ({
     tools: mutationsEnabled ? [...readToolNames, ...mutationToolNames] : readToolNames,
-    skills: [],
+    skills: mutationsEnabled ? ["agent-next-ready"] : [],
   }));
 
   bb.agents.registerTool({
@@ -510,8 +592,57 @@ export default async function plugin(bb: BbPluginApi) {
         edges,
         warnings,
         configuredEpicId: configured.config.epic_id ?? null,
+        mutationsEnabled: current.enableAgentMutations,
         generatedAt: new Date().toISOString(),
       };
+    },
+
+    async startWork({ storyId, projectId, epicId }) {
+      const current = await settings.get();
+      const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
+      if (!token) {
+        throw new Error(
+          "Shortcut API token is not configured. Set it in Extensions → Plugins → Shortcut Agent.",
+        );
+      }
+      if (!current.enableAgentMutations) {
+        throw new Error(
+          "The agent has to claim the Story before working it. Enable agent mutations in Extensions → Plugins → Shortcut Agent first.",
+        );
+      }
+
+      const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const selectedEpicId = epicId ?? configured.config.epic_id;
+      if (!selectedEpicId) {
+        throw new Error(
+          "No Epic is selected. Enter an Epic ID in the panel or add epic_id to .shortcut-agent.json.",
+        );
+      }
+
+      const detail = await shortcut.execute(["show", String(storyId)], {
+        projectId: configured.project.id,
+      });
+      if (detail.exitCode !== 0) {
+        throw cliFailure(detail.payload, `Could not read Story ${storyId}.`);
+      }
+      const shown = shownStorySchema.safeParse(detail.payload);
+      const story = shown.success ? shown.data.story : null;
+      const title = story?.title ?? `Story ${storyId}`;
+
+      const thread = await bb.sdk.threads.spawn({
+        projectId: configured.project.id,
+        environment: { type: "project-default" },
+        title: `sc-${storyId}: ${title}`,
+        prompt: startWorkPrompt({
+          storyId,
+          title,
+          url: story?.app_url ?? null,
+          epicId: Number(selectedEpicId),
+          description: story?.description ?? "",
+        }),
+      });
+
+      return { threadId: thread.id, storyId, title };
     },
   });
 }
