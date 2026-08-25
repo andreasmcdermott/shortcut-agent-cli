@@ -29,6 +29,10 @@ import { cn } from "@/lib/utils";
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 2;
 const ZOOM_STEPS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2];
+const OWNED_EPICS_CACHE_VERSION = 1;
+const OWNED_EPICS_CACHE_TTL_MS = 5 * 60_000;
+const GRAPH_CACHE_VERSION = 1;
+const GRAPH_CACHE_TTL_MS = 5 * 60_000;
 
 const STATUS_LABELS: Record<NodeStatus, string> = {
   ready: "Ready",
@@ -230,9 +234,180 @@ function forgetEpic(projectId: string | null) {
   }
 }
 
+function ownedEpicsCacheKey(projectId: string | null) {
+  return `shortcut-agent:owned-epics:${projectId ?? "default"}`;
+}
+
+function isOwnedEpic(value: unknown): value is OwnedEpic {
+  if (typeof value !== "object" || value === null) return false;
+  const epic = value as Partial<OwnedEpic>;
+  return (
+    Number.isSafeInteger(epic.id) &&
+    Number(epic.id) > 0 &&
+    typeof epic.name === "string" &&
+    (epic.url === null || typeof epic.url === "string")
+  );
+}
+
+function readOwnedEpicsCache(projectId: string | null) {
+  try {
+    const key = ownedEpicsCacheKey(projectId);
+    const value = window.localStorage.getItem(key);
+    if (!value) return null;
+    const cached = JSON.parse(value) as {
+      version?: unknown;
+      cachedAt?: unknown;
+      epics?: unknown;
+    };
+    if (
+      cached.version !== OWNED_EPICS_CACHE_VERSION ||
+      typeof cached.cachedAt !== "number" ||
+      !Number.isFinite(cached.cachedAt) ||
+      !Array.isArray(cached.epics) ||
+      !cached.epics.every(isOwnedEpic)
+    ) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      epics: cached.epics,
+      fresh: Date.now() - cached.cachedAt < OWNED_EPICS_CACHE_TTL_MS,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function cacheOwnedEpics(projectId: string | null, epics: OwnedEpic[]) {
+  try {
+    window.localStorage.setItem(
+      ownedEpicsCacheKey(projectId),
+      JSON.stringify({
+        version: OWNED_EPICS_CACHE_VERSION,
+        cachedAt: Date.now(),
+        epics,
+      }),
+    );
+  } catch {
+    // The picker still works when browser storage is unavailable.
+  }
+}
+
+function graphCacheKey(projectId: string | null, epicId: number | null) {
+  return `shortcut-agent:graph:${projectId ?? "default"}:${epicId ?? "configured"}`;
+}
+
+function isGraphNode(value: unknown): value is GraphNode {
+  if (typeof value !== "object" || value === null) return false;
+  const node = value as Partial<GraphNode>;
+  return (
+    typeof node.id === "number" &&
+    Number.isSafeInteger(node.id) &&
+    typeof node.title === "string" &&
+    (node.url === null || typeof node.url === "string") &&
+    typeof node.stateName === "string" &&
+    typeof node.stateType === "string" &&
+    typeof node.status === "string" &&
+    Object.prototype.hasOwnProperty.call(STATUS_LABELS, node.status) &&
+    typeof node.isActive === "boolean" &&
+    typeof node.blocked === "boolean" &&
+    Array.isArray(node.owners) &&
+    node.owners.every((owner) => typeof owner === "string") &&
+    (node.position === null ||
+      (typeof node.position === "number" && Number.isFinite(node.position))) &&
+    Array.isArray(node.externalBlockedBy) &&
+    node.externalBlockedBy.every((id) => typeof id === "number" && Number.isSafeInteger(id)) &&
+    (node.updatedAt === null || typeof node.updatedAt === "string")
+  );
+}
+
+function isGraphResponse(value: unknown): value is GraphResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const graph = value as Partial<GraphResponse>;
+  const countKeys = ["ready", "active", "blocked", "done", "other"] as const;
+  return (
+    typeof graph.project?.id === "string" &&
+    typeof graph.project.name === "string" &&
+    typeof graph.configPath === "string" &&
+    typeof graph.epic?.id === "number" &&
+    Number.isSafeInteger(graph.epic.id) &&
+    graph.epic.id > 0 &&
+    typeof graph.epic.name === "string" &&
+    (graph.epic.url === null || typeof graph.epic.url === "string") &&
+    typeof graph.counts === "object" &&
+    graph.counts !== null &&
+    countKeys.every(
+      (key) =>
+        typeof graph.counts?.[key] === "number" &&
+        Number.isSafeInteger(graph.counts[key]) &&
+        graph.counts[key] >= 0,
+    ) &&
+    Array.isArray(graph.nodes) &&
+    graph.nodes.every(isGraphNode) &&
+    Array.isArray(graph.edges) &&
+    graph.edges.every(
+      (edge) =>
+        typeof edge?.source === "number" &&
+        Number.isSafeInteger(edge.source) &&
+        typeof edge.target === "number" &&
+        Number.isSafeInteger(edge.target),
+    ) &&
+    Array.isArray(graph.warnings) &&
+    graph.warnings.every((warning) => typeof warning === "string") &&
+    (graph.configuredEpicId === null ||
+      (typeof graph.configuredEpicId === "number" &&
+        Number.isSafeInteger(graph.configuredEpicId))) &&
+    typeof graph.mutationsEnabled === "boolean" &&
+    typeof graph.generatedAt === "string"
+  );
+}
+
+function readGraphCache(projectId: string | null, epicId: number | null) {
+  try {
+    const key = graphCacheKey(projectId, epicId);
+    const value = window.localStorage.getItem(key);
+    if (!value) return null;
+    const cached = JSON.parse(value) as {
+      version?: unknown;
+      cachedAt?: unknown;
+      graph?: unknown;
+    };
+    const age = typeof cached.cachedAt === "number" ? Date.now() - cached.cachedAt : -1;
+    if (
+      cached.version !== GRAPH_CACHE_VERSION ||
+      age < 0 ||
+      age >= GRAPH_CACHE_TTL_MS ||
+      !isGraphResponse(cached.graph)
+    ) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return cached.graph;
+  } catch {
+    return null;
+  }
+}
+
+function cacheGraph(
+  projectId: string | null,
+  requestedEpicId: number | null,
+  graph: GraphResponse,
+) {
+  try {
+    const value = JSON.stringify({
+      version: GRAPH_CACHE_VERSION,
+      cachedAt: Date.now(),
+      graph,
+    });
+    window.localStorage.setItem(graphCacheKey(projectId, requestedEpicId), value);
+    window.localStorage.setItem(graphCacheKey(projectId, graph.epic.id), value);
+  } catch {
+    // A cold-loading shell remains available when browser storage is unavailable.
+  }
+}
+
 function EpicPicker({
   value,
-  loading,
   ownedEpics,
   ownedEpicsLoading,
   ownedEpicsError,
@@ -245,7 +420,6 @@ function EpicPicker({
   onUseDefault,
 }: {
   value: string;
-  loading: boolean;
   ownedEpics: OwnedEpic[];
   ownedEpicsLoading: boolean;
   ownedEpicsError: string | null;
@@ -302,7 +476,7 @@ function EpicPicker({
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
-          <Button type="submit" size="sm" variant="outline" disabled={loading}>
+          <Button type="submit" size="sm" variant="outline">
             Load
           </Button>
           {canUseDefault ? (
@@ -314,7 +488,9 @@ function EpicPicker({
       </div>
       {ownedEpicsError ? (
         <div className="text-xs text-muted-foreground">
-          Could not load owned Epics. Enter an Epic ID manually.
+          {ownedEpics.length > 0
+            ? "Could not refresh owned Epics. Showing the cached list."
+            : "Could not load owned Epics. Enter an Epic ID manually."}
         </div>
       ) : null}
       {selectionError ? (
@@ -337,10 +513,16 @@ function EpicGraph({ subPath }: { subPath: string }) {
     requestedEpicId === null ? "" : String(requestedEpicId),
   );
   const [selectionError, setSelectionError] = useState<string | null>(null);
-  const [ownedEpics, setOwnedEpics] = useState<OwnedEpic[]>([]);
-  const [ownedEpicsLoading, setOwnedEpicsLoading] = useState(true);
+  const [ownedEpics, setOwnedEpics] = useState<OwnedEpic[]>(
+    () => readOwnedEpicsCache(projectId)?.epics ?? [],
+  );
+  const [ownedEpicsLoading, setOwnedEpicsLoading] = useState(
+    () => readOwnedEpicsCache(projectId) === null,
+  );
   const [ownedEpicsError, setOwnedEpicsError] = useState<string | null>(null);
-  const [data, setData] = useState<GraphResponse | null>(null);
+  const [data, setData] = useState<GraphResponse | null>(() =>
+    readGraphCache(projectId, requestedEpicId),
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -356,6 +538,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
         epicId: requestedEpicId,
       });
       setData(result);
+      cacheGraph(projectId, requestedEpicId, result);
       setEpicInput(String(result.epic.id));
       rememberEpic(projectId, result.epic.id);
       setError(null);
@@ -367,13 +550,23 @@ function EpicGraph({ subPath }: { subPath: string }) {
   }, [projectId, requestedEpicId, rpc]);
 
   const loadOwnedEpics = useCallback(async () => {
-    setOwnedEpicsLoading(true);
+    const cached = readOwnedEpicsCache(projectId);
+    if (cached) {
+      setOwnedEpics(cached.epics);
+      setOwnedEpicsLoading(false);
+      setOwnedEpicsError(null);
+      if (cached.fresh) return;
+    } else {
+      setOwnedEpics([]);
+      setOwnedEpicsLoading(true);
+    }
     try {
       const result = await rpc.call("listOwnedEpics", { projectId });
       setOwnedEpics(result.epics);
+      cacheOwnedEpics(projectId, result.epics);
       setOwnedEpicsError(null);
     } catch (cause) {
-      setOwnedEpics([]);
+      if (!cached) setOwnedEpics([]);
       setOwnedEpicsError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setOwnedEpicsLoading(false);
@@ -410,6 +603,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
 
   useEffect(() => {
     if (requestedEpicId) setEpicInput(String(requestedEpicId));
+    setData(readGraphCache(projectId, requestedEpicId));
     void load();
     const timer = window.setInterval(() => void load(), 60_000);
     return () => window.clearInterval(timer);
@@ -450,7 +644,6 @@ function EpicGraph({ subPath }: { subPath: string }) {
   const picker = (
     <EpicPicker
       value={epicInput}
-      loading={loading}
       ownedEpics={ownedEpics}
       ownedEpicsLoading={ownedEpicsLoading}
       ownedEpicsError={ownedEpicsError}
@@ -530,9 +723,15 @@ function EpicGraph({ subPath }: { subPath: string }) {
 
   if (!data && loading) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
-        Loading Shortcut Agent…
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        <div className="border-b border-border px-4 py-3 md:px-5">
+          <div className="text-sm font-medium">Shortcut Agent</div>
+          <div className="mt-2">{picker}</div>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
+          Loading Epic graph…
+        </div>
       </div>
     );
   }

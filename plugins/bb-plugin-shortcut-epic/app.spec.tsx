@@ -330,4 +330,125 @@ describe("Shortcut Agent nav panel", () => {
 
     slot.lifecycle.unmount();
   });
+
+  it("reuses a fresh owned Epic cache without blocking or calling Shortcut again", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const ownedEpics = [
+      { id: 42, name: "Ship agent workflow", url: graph.epic.url },
+      {
+        id: 84,
+        name: "Second agent workflow",
+        url: "https://app.shortcut.com/acme/epic/84",
+      },
+    ];
+    let ownedEpicRequests = 0;
+    const rpc = {
+      listOwnedEpics: () => {
+        ownedEpicRequests += 1;
+        return { epics: ownedEpics };
+      },
+      loadGraph: () => graph,
+      startWork: () => ({
+        threadId: "thread_1",
+        storyId: 2,
+        title: longStoryTitle,
+      }),
+    };
+
+    const firstSlot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      { context: { projectId: "proj_1" }, rpc },
+    );
+    await firstSlot.findByRole("option", {
+      name: "Second agent workflow (epic-84)",
+    });
+    expect(ownedEpicRequests).toBe(1);
+    firstSlot.lifecycle.unmount();
+
+    const secondSlot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      { context: { projectId: "proj_1" }, rpc },
+    );
+    const picker = await secondSlot.findByRole("combobox", { name: "Owned Epic" });
+    expect((picker as HTMLSelectElement).disabled).toBe(false);
+    expect(
+      secondSlot.getByRole("option", { name: "Second agent workflow (epic-84)" }),
+    ).toBeTruthy();
+    await waitFor(() => expect(ownedEpicRequests).toBe(1));
+
+    secondSlot.lifecycle.unmount();
+  });
+
+  it("keeps Epic selection available during a cold graph load", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const slot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      {
+        context: { projectId: "proj_1" },
+        rpc: {
+          listOwnedEpics: () => ({ epics: [] }),
+          loadGraph: () => new Promise<GraphResponse>(() => {}),
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
+      },
+    );
+
+    expect(slot.getByRole("spinbutton", { name: "Epic ID" })).toBeTruthy();
+    expect((slot.getByRole("button", { name: "Load" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    expect(slot.getByText("Loading Epic graph…")).toBeTruthy();
+    expect(slot.queryByText("Loading Shortcut Agent…")).toBeNull();
+
+    slot.lifecycle.unmount();
+  });
+
+  it("renders a cached graph while refreshing it in the background", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    let graphRequests = 0;
+    let holdGraphRefresh = false;
+    const rpc = {
+      listOwnedEpics: () => ({ epics: [] }),
+      loadGraph: () => {
+        graphRequests += 1;
+        return holdGraphRefresh ? new Promise<GraphResponse>(() => {}) : graph;
+      },
+      startWork: () => ({
+        threadId: "thread_1",
+        storyId: 2,
+        title: longStoryTitle,
+      }),
+    };
+
+    const firstSlot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      { context: { projectId: "proj_1" }, rpc },
+    );
+    await firstSlot.findByText("Foundation");
+    expect(graphRequests).toBe(1);
+    firstSlot.lifecycle.unmount();
+
+    holdGraphRefresh = true;
+    const secondSlot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      { context: { projectId: "proj_1" }, rpc },
+    );
+    expect(secondSlot.getByText("Foundation")).toBeTruthy();
+    expect(secondSlot.queryByText("Loading Shortcut Agent…")).toBeNull();
+    await waitFor(() => expect(graphRequests).toBe(2));
+
+    secondSlot.lifecycle.unmount();
+  });
 });

@@ -6070,6 +6070,10 @@ DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
 var MIN_ZOOM = 0.02;
 var MAX_ZOOM = 2;
 var ZOOM_STEPS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2];
+var OWNED_EPICS_CACHE_VERSION = 1;
+var OWNED_EPICS_CACHE_TTL_MS = 5 * 6e4;
+var GRAPH_CACHE_VERSION = 1;
+var GRAPH_CACHE_TTL_MS = 5 * 6e4;
 var STATUS_LABELS = {
   ready: "Ready",
   active: "Active",
@@ -6241,9 +6245,93 @@ function forgetEpic(projectId) {
   } catch {
   }
 }
+function ownedEpicsCacheKey(projectId) {
+  return `shortcut-agent:owned-epics:${projectId ?? "default"}`;
+}
+function isOwnedEpic(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const epic = value;
+  return Number.isSafeInteger(epic.id) && Number(epic.id) > 0 && typeof epic.name === "string" && (epic.url === null || typeof epic.url === "string");
+}
+function readOwnedEpicsCache(projectId) {
+  try {
+    const key = ownedEpicsCacheKey(projectId);
+    const value = window.localStorage.getItem(key);
+    if (!value) return null;
+    const cached = JSON.parse(value);
+    if (cached.version !== OWNED_EPICS_CACHE_VERSION || typeof cached.cachedAt !== "number" || !Number.isFinite(cached.cachedAt) || !Array.isArray(cached.epics) || !cached.epics.every(isOwnedEpic)) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return {
+      epics: cached.epics,
+      fresh: Date.now() - cached.cachedAt < OWNED_EPICS_CACHE_TTL_MS
+    };
+  } catch {
+    return null;
+  }
+}
+function cacheOwnedEpics(projectId, epics) {
+  try {
+    window.localStorage.setItem(
+      ownedEpicsCacheKey(projectId),
+      JSON.stringify({
+        version: OWNED_EPICS_CACHE_VERSION,
+        cachedAt: Date.now(),
+        epics
+      })
+    );
+  } catch {
+  }
+}
+function graphCacheKey(projectId, epicId) {
+  return `shortcut-agent:graph:${projectId ?? "default"}:${epicId ?? "configured"}`;
+}
+function isGraphNode(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const node = value;
+  return typeof node.id === "number" && Number.isSafeInteger(node.id) && typeof node.title === "string" && (node.url === null || typeof node.url === "string") && typeof node.stateName === "string" && typeof node.stateType === "string" && typeof node.status === "string" && Object.prototype.hasOwnProperty.call(STATUS_LABELS, node.status) && typeof node.isActive === "boolean" && typeof node.blocked === "boolean" && Array.isArray(node.owners) && node.owners.every((owner) => typeof owner === "string") && (node.position === null || typeof node.position === "number" && Number.isFinite(node.position)) && Array.isArray(node.externalBlockedBy) && node.externalBlockedBy.every((id) => typeof id === "number" && Number.isSafeInteger(id)) && (node.updatedAt === null || typeof node.updatedAt === "string");
+}
+function isGraphResponse(value) {
+  if (typeof value !== "object" || value === null) return false;
+  const graph = value;
+  const countKeys = ["ready", "active", "blocked", "done", "other"];
+  return typeof graph.project?.id === "string" && typeof graph.project.name === "string" && typeof graph.configPath === "string" && typeof graph.epic?.id === "number" && Number.isSafeInteger(graph.epic.id) && graph.epic.id > 0 && typeof graph.epic.name === "string" && (graph.epic.url === null || typeof graph.epic.url === "string") && typeof graph.counts === "object" && graph.counts !== null && countKeys.every(
+    (key) => typeof graph.counts?.[key] === "number" && Number.isSafeInteger(graph.counts[key]) && graph.counts[key] >= 0
+  ) && Array.isArray(graph.nodes) && graph.nodes.every(isGraphNode) && Array.isArray(graph.edges) && graph.edges.every(
+    (edge) => typeof edge?.source === "number" && Number.isSafeInteger(edge.source) && typeof edge.target === "number" && Number.isSafeInteger(edge.target)
+  ) && Array.isArray(graph.warnings) && graph.warnings.every((warning) => typeof warning === "string") && (graph.configuredEpicId === null || typeof graph.configuredEpicId === "number" && Number.isSafeInteger(graph.configuredEpicId)) && typeof graph.mutationsEnabled === "boolean" && typeof graph.generatedAt === "string";
+}
+function readGraphCache(projectId, epicId) {
+  try {
+    const key = graphCacheKey(projectId, epicId);
+    const value = window.localStorage.getItem(key);
+    if (!value) return null;
+    const cached = JSON.parse(value);
+    const age = typeof cached.cachedAt === "number" ? Date.now() - cached.cachedAt : -1;
+    if (cached.version !== GRAPH_CACHE_VERSION || age < 0 || age >= GRAPH_CACHE_TTL_MS || !isGraphResponse(cached.graph)) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return cached.graph;
+  } catch {
+    return null;
+  }
+}
+function cacheGraph(projectId, requestedEpicId, graph) {
+  try {
+    const value = JSON.stringify({
+      version: GRAPH_CACHE_VERSION,
+      cachedAt: Date.now(),
+      graph
+    });
+    window.localStorage.setItem(graphCacheKey(projectId, requestedEpicId), value);
+    window.localStorage.setItem(graphCacheKey(projectId, graph.epic.id), value);
+  } catch {
+  }
+}
 function EpicPicker({
   value,
-  loading,
   ownedEpics,
   ownedEpicsLoading,
   ownedEpicsError,
@@ -6294,11 +6382,11 @@ function EpicPicker({
             onChange: (event) => onChange(event.target.value)
           }
         ),
-        /* @__PURE__ */ jsx(Button, { type: "submit", size: "sm", variant: "outline", disabled: loading, children: "Load" }),
+        /* @__PURE__ */ jsx(Button, { type: "submit", size: "sm", variant: "outline", children: "Load" }),
         canUseDefault ? /* @__PURE__ */ jsx(Button, { type: "button", size: "sm", variant: "ghost", onClick: onUseDefault, children: "Use default" }) : null
       ] })
     ] }),
-    ownedEpicsError ? /* @__PURE__ */ jsx("div", { className: "text-xs text-muted-foreground", children: "Could not load owned Epics. Enter an Epic ID manually." }) : null,
+    ownedEpicsError ? /* @__PURE__ */ jsx("div", { className: "text-xs text-muted-foreground", children: ownedEpics.length > 0 ? "Could not refresh owned Epics. Showing the cached list." : "Could not load owned Epics. Enter an Epic ID manually." }) : null,
     selectionError ? /* @__PURE__ */ jsx("div", { className: "text-xs text-destructive", children: selectionError }) : null
   ] });
 }
@@ -6315,10 +6403,16 @@ function EpicGraph({ subPath }) {
     () => requestedEpicId === null ? "" : String(requestedEpicId)
   );
   const [selectionError, setSelectionError] = useState(null);
-  const [ownedEpics, setOwnedEpics] = useState([]);
-  const [ownedEpicsLoading, setOwnedEpicsLoading] = useState(true);
+  const [ownedEpics, setOwnedEpics] = useState(
+    () => readOwnedEpicsCache(projectId)?.epics ?? []
+  );
+  const [ownedEpicsLoading, setOwnedEpicsLoading] = useState(
+    () => readOwnedEpicsCache(projectId) === null
+  );
   const [ownedEpicsError, setOwnedEpicsError] = useState(null);
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(
+    () => readGraphCache(projectId, requestedEpicId)
+  );
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -6333,6 +6427,7 @@ function EpicGraph({ subPath }) {
         epicId: requestedEpicId
       });
       setData(result);
+      cacheGraph(projectId, requestedEpicId, result);
       setEpicInput(String(result.epic.id));
       rememberEpic(projectId, result.epic.id);
       setError(null);
@@ -6343,13 +6438,23 @@ function EpicGraph({ subPath }) {
     }
   }, [projectId, requestedEpicId, rpc]);
   const loadOwnedEpics = useCallback(async () => {
-    setOwnedEpicsLoading(true);
+    const cached = readOwnedEpicsCache(projectId);
+    if (cached) {
+      setOwnedEpics(cached.epics);
+      setOwnedEpicsLoading(false);
+      setOwnedEpicsError(null);
+      if (cached.fresh) return;
+    } else {
+      setOwnedEpics([]);
+      setOwnedEpicsLoading(true);
+    }
     try {
       const result = await rpc.call("listOwnedEpics", { projectId });
       setOwnedEpics(result.epics);
+      cacheOwnedEpics(projectId, result.epics);
       setOwnedEpicsError(null);
     } catch (cause) {
-      setOwnedEpics([]);
+      if (!cached) setOwnedEpics([]);
       setOwnedEpicsError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setOwnedEpicsLoading(false);
@@ -6383,6 +6488,7 @@ function EpicGraph({ subPath }) {
   }, [projectId, routeEpicId]);
   useEffect(() => {
     if (requestedEpicId) setEpicInput(String(requestedEpicId));
+    setData(readGraphCache(projectId, requestedEpicId));
     void load();
     const timer = window.setInterval(() => void load(), 6e4);
     return () => window.clearInterval(timer);
@@ -6419,7 +6525,6 @@ function EpicGraph({ subPath }) {
     EpicPicker,
     {
       value: epicInput,
-      loading,
       ownedEpics,
       ownedEpicsLoading,
       ownedEpicsError,
@@ -6490,9 +6595,15 @@ function EpicGraph({ subPath }) {
     );
   };
   if (!data && loading) {
-    return /* @__PURE__ */ jsxs("div", { className: "flex h-full items-center justify-center gap-2 text-sm text-muted-foreground", children: [
-      /* @__PURE__ */ jsx(Icon, { name: "Spinner", className: "animate-spin", "aria-hidden": "true" }),
-      "Loading Shortcut Agent\u2026"
+    return /* @__PURE__ */ jsxs("div", { className: "flex h-full min-h-0 flex-col bg-background", children: [
+      /* @__PURE__ */ jsxs("div", { className: "border-b border-border px-4 py-3 md:px-5", children: [
+        /* @__PURE__ */ jsx("div", { className: "text-sm font-medium", children: "Shortcut Agent" }),
+        /* @__PURE__ */ jsx("div", { className: "mt-2", children: picker })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground", children: [
+        /* @__PURE__ */ jsx(Icon, { name: "Spinner", className: "animate-spin", "aria-hidden": "true" }),
+        "Loading Epic graph\u2026"
+      ] })
     ] });
   }
   if (!data && error) {
