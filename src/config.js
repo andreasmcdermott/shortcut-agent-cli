@@ -166,6 +166,12 @@ export async function loadConfig(
     ...local,
     states: { ...file.states, ...local.states },
   };
+  const completionMode = merged.completion_mode ?? "review";
+  if (!["review", "done"].includes(completionMode)) {
+    throw configError("completion_mode must be either review or done", {
+      completion_mode: completionMode,
+    });
+  }
 
   const commandAgent = option(options, "agent");
   const environmentAgent = env.SHORTCUT_AGENT_ID;
@@ -203,9 +209,11 @@ export async function loadConfig(
     agentId,
     agentSource,
     runId: env.SHORTCUT_AGENT_RUN_ID,
+    completionMode,
     states: {
       ready: merged.states?.ready,
       started: merged.states?.started,
+      review: merged.states?.review,
       done: merged.states?.done,
       cancelled: merged.states?.cancelled,
     },
@@ -213,7 +221,7 @@ export async function loadConfig(
     localRaw: local,
   };
 
-  for (const state of ["ready", "started", "done", "cancelled"]) {
+  for (const state of ["ready", "started", "review", "done", "cancelled"]) {
     const override = option(options, `${state}-state`);
     if (override !== undefined) {
       config.states[state] = integer(override, `${state} state ID`);

@@ -80,6 +80,10 @@ When the work is done and verified:
 bb shortcut-agent complete STORY --summary 'What changed' --verification 'How it was checked'
 ```
 
+By default this moves the Story to the configured Review state. It reaches Done
+through the normal Shortcut review/merge workflow; projects can explicitly opt
+into direct completion with `completion_mode: "done"`.
+
 Use `bb shortcut-agent handoff STORY --summary '...' [--release]` to record
 partial progress, and `release` if you are stopping without finishing.
 

@@ -231,6 +231,18 @@ export async function initCommand(parsed, context) {
   const workspaceOption = strictTextOption(parsed.options, "workspace");
   const teamCommandOption = strictTextOption(parsed.options, "team");
   const requestedAgent = option(parsed.options, "agent");
+  const requestedCompletionMode = strictTextOption(
+    parsed.options,
+    "completion-mode",
+  );
+  if (
+    requestedCompletionMode !== undefined &&
+    !["review", "done"].includes(requestedCompletionMode)
+  ) {
+    throw argumentError("--completion-mode must be review or done");
+  }
+  const completionMode =
+    requestedCompletionMode ?? config.raw.completion_mode ?? "review";
   if (
     requestedAgent !== undefined &&
     (typeof requestedAgent === "boolean" || !String(requestedAgent).trim())
@@ -280,17 +292,39 @@ export async function initCommand(parsed, context) {
     stateOverride("ready") ??
     choose("unstarted")?.id ??
     choose("backlog")?.id;
-  const started = stateOverride("started") ?? choose("started")?.id;
+  const review =
+    stateOverride("review") ??
+    candidates.find(
+      (state) => state.type === "started" && /review/i.test(state.name ?? ""),
+    )?.id;
+  const started =
+    stateOverride("started") ??
+    candidates.find(
+      (state) =>
+        state.type === "started" &&
+        Number(state.id) !== Number(review) &&
+        /start|progress|doing|develop|implement/i.test(state.name ?? ""),
+    )?.id ??
+    candidates.find(
+      (state) =>
+        state.type === "started" && Number(state.id) !== Number(review),
+    )?.id ??
+    choose("started")?.id;
   const done =
     stateOverride("done") ?? choose("done", /done|complete|finish/i)?.id;
   const cancelled =
     stateOverride("cancelled") ??
     choose("done", /cancel|won't|wont|abandon/i)?.id ??
     done;
-  if (!ready || !started || !done) {
-    throw configError("Could not discover required ready, started, and done states", {
-      states: candidates.map(({ id, name, type }) => ({ id, name, type })),
-    });
+  if (!ready || !started || !done || (completionMode === "review" && !review)) {
+    throw configError(
+      completionMode === "review" && !review
+        ? "Could not discover a review workflow state; pass --review-state ID or opt in to immediate completion with --completion-mode done"
+        : "Could not discover required ready, started, and done states",
+      {
+        states: candidates.map(({ id, name, type }) => ({ id, name, type })),
+      },
+    );
   }
   const teamId = teamOption ?? (team ? String(team.id) : undefined);
   const document = {
@@ -299,9 +333,11 @@ export async function initCommand(parsed, context) {
       ? { epic_id: Number(epic.id) }
       : {}),
     ...(teamId ? { team_id: teamId } : {}),
+    completion_mode: completionMode,
     states: {
       ready: Number(ready),
       started: Number(started),
+      ...(review ? { review: Number(review) } : {}),
       done: Number(done),
       cancelled: Number(cancelled),
     },
@@ -314,6 +350,7 @@ export async function initCommand(parsed, context) {
   }
   const {
     agent_id: legacyAgent,
+    completion_mode: _existingCompletionMode,
     workspace: _existingWorkspace,
     epic_id: _existingEpic,
     team_id: _existingTeam,
@@ -400,6 +437,7 @@ export async function initCommand(parsed, context) {
     },
     team: team ? { id: String(team.id), name: team.name } : null,
     warnings,
+    completion_mode: completionMode,
     ...(localWritten
       ? { local_config_file: localWritten, agent_id: String(agentToPersist) }
       : {}),
@@ -420,6 +458,7 @@ async function configCommand(_parsed, { config }) {
     team_id: config.teamId,
     agent_id: config.agentId,
     agent_id_source: config.agentSource,
+    completion_mode: config.completionMode,
     states: config.states,
   };
 }
@@ -436,10 +475,13 @@ async function doctorCommand(_parsed, { client, config }) {
   const expected = {
     ready: new Set(["backlog", "unstarted"]),
     started: new Set(["started"]),
+    review: new Set(["started"]),
     done: new Set(["done"]),
     cancelled: new Set(["done"]),
   };
-  for (const name of ["ready", "started", "done", "cancelled"]) {
+  const requiredStates = ["ready", "started", "done", "cancelled"];
+  if (config.completionMode === "review") requiredStates.splice(2, 0, "review");
+  for (const name of requiredStates) {
     if (!config.states[name]) warnings.push(`${name} state is not configured`);
     else if (!configured[name]) warnings.push(`${name} state ${config.states[name]} was not found`);
     else if (!expected[name].has(configured[name].type)) {
@@ -456,6 +498,7 @@ async function doctorCommand(_parsed, { client, config }) {
     epic: { id: Number(epic.id), name: epic.name },
     agent_id: config.agentId,
     agent_id_source: config.agentSource,
+    completion_mode: config.completionMode,
     states: Object.fromEntries(
       Object.entries(configured).map(([name, state]) => [
         name,
@@ -736,19 +779,31 @@ async function lifecycleCommand(parsed, context, event) {
     allowUnowned: event === "cancel",
     force,
   });
-  if (event === "complete" && !force && storyState(story, stateData.index).type !== "started") {
-    throw conflictError(
-      "invalid_story_state",
-      `Story ${storyId} must be started before it can be completed`,
-    );
+  if (event === "complete" && !force) {
+    const currentState = storyState(story, stateData.index);
+    if (
+      config.completionMode === "review" &&
+      Number(currentState.id) === Number(config.states.review)
+    ) {
+      throw conflictError(
+        "invalid_story_state",
+        `Story ${storyId} is already in the configured review state`,
+      );
+    }
+    if (currentState.type !== "started") {
+      throw conflictError(
+        "invalid_story_state",
+        `Story ${storyId} must be started before it can be completed`,
+      );
+    }
   }
   const requiredField = event === "cancel" || event === "release" ? "reason" : "summary";
   const agentEvent = eventInput(parsed, config, event, requiredField);
-  const comment = await client.createStoryComment(storyId, agentEvent.comment);
 
   let body;
   if (event === "complete") {
-    body = { workflow_state_id: requireState(config, "done") };
+    const targetState = config.completionMode === "done" ? "done" : "review";
+    body = { workflow_state_id: requireState(config, targetState) };
   } else if (event === "cancel") {
     body = {
       workflow_state_id: config.states.cancelled ?? requireState(config, "done"),
@@ -759,6 +814,7 @@ async function lifecycleCommand(parsed, context, event) {
       workflow_state_id: requireState(config, "ready"),
     };
   }
+  const comment = await client.createStoryComment(storyId, agentEvent.comment);
   const updated = await client.updateStory(storyId, body);
   return {
     ok: true,

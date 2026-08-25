@@ -124,6 +124,9 @@ bb shortcut-agent complete 319163 --summary 'Implemented the change' \
 bb shortcut-agent dep add 319163 --blocked-by 319100
 ```
 
+`complete` follows the project's `completion_mode`: Review by default, or Done
+for projects that explicitly opt into direct completion.
+
 Scope comes from the invoking thread's bb project and its
 `.shortcut-agent.json`; the optional default project is only a fallback. The
 command supports the standalone CLI's read and mutation workflows except

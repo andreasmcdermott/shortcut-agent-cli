@@ -47,8 +47,9 @@ The token is never written to either config file.
 
 ### `init --epic ID`
 
-Calls v4 `whoami`, discovers workspace slug and workflow states **by state type**
-(not by name), and writes `.shortcut-agent.json` in cwd. `init` does not reuse an
+Calls v4 `whoami`, discovers workspace slug and workflow states by state type,
+using names to distinguish Review and Cancelled, and writes
+`.shortcut-agent.json` in cwd. `init` does not reuse an
 ancestor config unless `--update-discovered` is supplied. `--config PATH` and
 `SHORTCUT_AGENT_CONFIG` may point to a new file for `init`; read commands require
 the selected file to exist.
@@ -62,15 +63,20 @@ unless `--team` overrides it. **Check `workflow.source` after running init** —
 default, which is often the wrong board.
 
 State discovery within that workflow: `ready` ← first `unstarted`, else
-`backlog`. `started` ← first `started`. `done` ← first `done` matching
-/done|complete|finish/i, else any `done`. `cancelled` ← first `done` matching
-/cancel|won't|wont|abandon/i, else falls back to `done`.
+`backlog`. `review` ← first `started` whose name contains `review`. `started` ←
+a non-review `started`, preferring names that resemble active implementation.
+`done` ← first `done` matching /done|complete|finish/i, else any `done`.
+`cancelled` ← first `done` matching /cancel|won't|wont|abandon/i, else falls back
+to `done`.
 
 Overrides: `--workflow ID`, `--team UUID`, `--ready-state ID`,
-`--started-state ID`, `--done-state ID`, `--cancelled-state ID`.
+`--started-state ID`, `--review-state ID`, `--done-state ID`, and
+`--cancelled-state ID`. `--completion-mode review|done` chooses whether
+`complete` targets Review (the default) or Done.
 `--no-default-epic` still uses `--epic` for discovery but omits `epic_id` from
 the written config, requiring explicit Epic selection on later commands. Fails
-with exit 3 if ready/started/done cannot be resolved.
+with exit 3 if ready/started/done cannot be resolved, or if Review cannot be
+resolved while `completion_mode` is `review`.
 
 Initialization is create-only by default. A differing existing target is left
 untouched and reported with exit 3. `--merge` refreshes all known scope/state
@@ -208,7 +214,9 @@ Returns `claim` (the event metadata), `claim_comment_id`, `story`, `warnings`.
 ### `complete STORY --summary TEXT`
 
 Requires ownership by the authenticated member, and state type `started` unless
-`--force`. Moves to the done state.
+`--force`. Moves to the configured Review state by default, leaving dependent
+Stories blocked until this Story reaches Done. A project can opt into the old
+direct-to-Done behavior with `completion_mode: "done"`.
 
 Optional: `--verification TEXT`, `--evidence TEXT`, `--changed TEXT`,
 `--remaining TEXT`.

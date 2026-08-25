@@ -162,17 +162,18 @@ Split responsibilities so that graph *shape* has a single author while graph
 
 ### Worker — N in parallel, owns one node at a time
 
-- Claims one Story, implements it, completes it.
+- Claims one Story, implements it, sends it to review with `complete`.
 - May create work **only at its own node** (see the locality rule).
 - `handoff`s rather than dying silently when out of context or blocked.
 - Never runs `cancel`, never runs `--force`, never edits edges between Stories
   it does not hold.
 
-### Reviewer — optional, modeled as work, not as a role
+### Reviewer — optional
 
-The CLI has no review state. Model review as a *Story*: create
-`Review: <thing>` with `--blocked-by <impl-story>`. It becomes ready the moment
-implementation completes, and any worker can pick it up.
+`complete` moves implementation to the configured Review state by default, so
+human review can follow the normal Shortcut workflow. If review itself should
+be autonomous, claimable work, model it as a separate *Story* and relate it to
+the implementation without relying on the implementation Story to unblock it.
 
 ## The locality rule
 

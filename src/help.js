@@ -22,8 +22,13 @@ const COMMANDS = {
       ["--workflow ID", "Use this Workflow instead of discovering one from the Team"],
       ["--ready-state ID", "Override the discovered Ready state"],
       ["--started-state ID", "Override the discovered Started state"],
+      ["--review-state ID", "Override the discovered Review state"],
       ["--done-state ID", "Override the discovered Done state"],
       ["--cancelled-state ID", "Override the discovered Cancelled state"],
+      [
+        "--completion-mode MODE",
+        "Move completed work to review (default) or done",
+      ],
       ["--agent ID", "Save a local default agent identity"],
     ],
   },
@@ -97,7 +102,8 @@ const COMMANDS = {
     usage: ["start STORY"],
   },
   complete: {
-    description: "Records completion evidence and moves an owned Story to Done.",
+    description:
+      "Records completion evidence and moves an owned Story to Review (or Done when configured).",
     usage: ["complete STORY --summary TEXT [options]"],
     options: [
       ["--summary TEXT", "Required completion summary"],

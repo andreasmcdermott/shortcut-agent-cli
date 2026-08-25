@@ -43,7 +43,25 @@ test("layers ignored local config over shared project scope", async () => {
   assert.equal(config.epicId, 99);
   assert.equal(config.agentId, "local-agent");
   assert.equal(config.agentSource, "local-config");
-  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 4 });
+  assert.equal(config.completionMode, "review");
+  assert.deepEqual(config.states, {
+    ready: 1,
+    started: 2,
+    review: undefined,
+    done: 3,
+    cancelled: 4,
+  });
+});
+
+test("loads the project completion mode and rejects invalid values", async () => {
+  const directory = await projectConfig();
+  const filename = path.join(directory, ".shortcut-agent.json");
+  const project = JSON.parse(await readFile(filename, "utf8"));
+  await writeFile(filename, JSON.stringify({ ...project, completion_mode: "done" }));
+  assert.equal((await loadConfig({}, {}, directory)).completionMode, "done");
+
+  await writeFile(filename, JSON.stringify({ ...project, completion_mode: "later" }));
+  await assert.rejects(loadConfig({}, {}, directory), /review or done/);
 });
 
 test("an explicit Epic works when project config has no default Epic", async () => {

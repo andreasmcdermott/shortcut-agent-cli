@@ -12,7 +12,16 @@ function capture() {
   return { write: (value) => (text += value), value: () => text };
 }
 
-const STATE_WORKFLOW = { 1: 50, 2: 50, 3: 50, 4: 60, 5: 60, 6: 60 };
+const STATE_WORKFLOW = {
+  1: 50,
+  2: 50,
+  3: 50,
+  4: 60,
+  5: 60,
+  6: 60,
+  7: 50,
+  8: 60,
+};
 const STATE_NAMES = {
   1: ["Ready", "unstarted"],
   2: ["Doing", "started"],
@@ -20,6 +29,8 @@ const STATE_NAMES = {
   4: ["Beta Ready", "unstarted"],
   5: ["Beta Doing", "started"],
   6: ["Beta Done", "done"],
+  7: ["Waiting for Review", "started"],
+  8: ["Beta Waiting for Review", "started"],
 };
 
 function fullState(id) {
@@ -101,7 +112,7 @@ async function mockShortcut() {
     }
     if (url.pathname === "/api/v4/acme/workflow-states") {
       return send({
-        entities: [1, 2, 3, 4, 5, 6].map((id) => ({
+        entities: [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({
           ...fullState(id),
           workflow: { id: STATE_WORKFLOW[id] },
         })),
@@ -205,7 +216,7 @@ async function fixture(t) {
       workspace: "acme",
       epic_id: 99,
       agent_id: "worker-1",
-      states: { ready: 1, started: 2, done: 3, cancelled: 3 },
+      states: { ready: 1, started: 2, review: 7, done: 3, cancelled: 3 },
     }),
   );
   return { mock, directory, env: { SHORTCUT_API_TOKEN: "token", SHORTCUT_API_URL: mock.baseUrl } };
@@ -285,7 +296,7 @@ test("start refuses blocked work with a stable conflict exit code", async (t) =>
   assert.equal(JSON.parse(result.stderr).error.code, "story_blocked");
 });
 
-test("complete writes evidence before moving to Done", async (t) => {
+test("complete writes evidence before moving to Review by default", async (t) => {
   const setup = await fixture(t);
   await invoke(["start", "1"], setup);
   const result = await invoke(
@@ -293,9 +304,75 @@ test("complete writes evidence before moving to Done", async (t) => {
     setup,
   );
   assert.equal(result.exitCode, 0, result.stderr);
-  assert.equal(result.json.story.state.type, "done");
+  assert.equal(result.json.story.state.name, "Waiting for Review");
+  assert.equal(result.json.story.state.type, "started");
   assert.match(setup.mock.comments.get(1).at(-1).text, /Agent completion/);
   assert.match(setup.mock.comments.get(1).at(-1).text, /npm test/);
+
+  const repeated = await invoke(
+    ["complete", "1", "--summary", "Finished again"],
+    setup,
+  );
+  assert.equal(repeated.exitCode, 4);
+  assert.match(JSON.parse(repeated.stderr).error.message, /already.*review/i);
+});
+
+test("complete can move directly to Done when the project opts in", async (t) => {
+  const setup = await fixture(t);
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  const config = JSON.parse(await readFile(filename, "utf8"));
+  const { review: _review, ...states } = config.states;
+  await writeFile(
+    filename,
+    JSON.stringify({ ...config, completion_mode: "done", states }),
+  );
+  await invoke(["start", "1"], setup);
+
+  const result = await invoke(
+    ["complete", "1", "--summary", "Finished"],
+    setup,
+  );
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.json.story.state.type, "done");
+});
+
+test("complete fails safely when the default Review state is not configured", async (t) => {
+  const setup = await fixture(t);
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  const config = JSON.parse(await readFile(filename, "utf8"));
+  const { review: _review, ...states } = config.states;
+  await writeFile(filename, JSON.stringify({ ...config, states }));
+  await invoke(["start", "1"], setup);
+
+  const result = await invoke(
+    ["complete", "1", "--summary", "Finished"],
+    setup,
+  );
+
+  assert.equal(result.exitCode, 3);
+  assert.match(JSON.parse(result.stderr).error.message, /review.*not configured/i);
+  assert.equal(setup.mock.comments.get(1).length, 1, "must not record completion");
+  assert.equal(setup.mock.stories.get(1).workflow_state.id, 2);
+});
+
+test("doctor requires Review only for projects using review completion", async (t) => {
+  const setup = await fixture(t);
+  const reviewResult = await invoke(["doctor"], setup);
+  assert.equal(reviewResult.exitCode, 0, reviewResult.stderr);
+  assert.equal(reviewResult.json.completion_mode, "review");
+  assert.equal(reviewResult.json.states.review.name, "Waiting for Review");
+
+  const filename = path.join(setup.directory, ".shortcut-agent.json");
+  const config = JSON.parse(await readFile(filename, "utf8"));
+  const { review: _review, ...states } = config.states;
+  await writeFile(
+    filename,
+    JSON.stringify({ ...config, completion_mode: "done", states }),
+  );
+  const doneResult = await invoke(["doctor"], setup);
+  assert.equal(doneResult.exitCode, 0, doneResult.stderr);
+  assert.equal(doneResult.json.completion_mode, "done");
 });
 
 test("init discovers workspace and semantic workflow states", async (t) => {
@@ -316,7 +393,14 @@ test("init discovers workspace and semantic workflow states", async (t) => {
   assert.equal(config.workspace, "acme");
   assert.equal(config.epic_id, 99);
   assert.equal(Object.hasOwn(config, "agent_id"), false);
-  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  assert.equal(config.completion_mode, "review");
+  assert.deepEqual(config.states, {
+    ready: 1,
+    started: 2,
+    review: 7,
+    done: 3,
+    cancelled: 3,
+  });
   await assert.rejects(
     readFile(path.join(directory, ".shortcut-agent.local.json"), "utf8"),
     { code: "ENOENT" },
@@ -458,6 +542,7 @@ test("init --merge refreshes scope and states while preserving extra keys", asyn
       epic_id: 99,
       team_id: "team-1",
       api_url: "https://proxy.example",
+      completion_mode: "done",
       custom: { retain: true },
       states: { ready: 1, started: 2, done: 3, cancelled: 3, review: 7 },
     }),
@@ -468,6 +553,7 @@ test("init --merge refreshes scope and states while preserving extra keys", asyn
   const config = JSON.parse(await readFile(filename, "utf8"));
   assert.equal(config.epic_id, 98);
   assert.equal(config.team_id, "team-2");
+  assert.equal(config.completion_mode, "done");
   assert.deepEqual(config.custom, { retain: true });
   assert.equal(config.api_url, "https://proxy.example");
   assert.deepEqual(config.states, {
@@ -475,7 +561,7 @@ test("init --merge refreshes scope and states while preserving extra keys", asyn
     started: 5,
     done: 6,
     cancelled: 6,
-    review: 7,
+    review: 8,
   });
 });
 
@@ -498,7 +584,13 @@ test("init --merge removes a stale known team while preserving unknown keys", as
   const config = JSON.parse(await readFile(filename, "utf8"));
   assert.equal(Object.hasOwn(config, "team_id"), false);
   assert.equal(config.custom, true);
-  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  assert.deepEqual(config.states, {
+    ready: 1,
+    started: 2,
+    review: 7,
+    done: 3,
+    cancelled: 3,
+  });
 });
 
 test("init migration preserves an existing higher-precedence local agent", async (t) => {
@@ -542,7 +634,13 @@ test("init --force replaces extra keys and refreshes all discovered states", asy
   assert.equal(result.exitCode, 0, result.stderr);
   const config = JSON.parse(await readFile(filename, "utf8"));
   assert.equal(config.epic_id, 98);
-  assert.deepEqual(config.states, { ready: 4, started: 5, done: 6, cancelled: 6 });
+  assert.deepEqual(config.states, {
+    ready: 4,
+    started: 5,
+    review: 8,
+    done: 6,
+    cancelled: 6,
+  });
   assert.equal(Object.hasOwn(config, "api_url"), false);
 });
 
@@ -770,9 +868,21 @@ test("init resolves states from the Epic team's workflow, not the member's", asy
   const config = await readSharedConfig(setup.directory);
   assert.deepEqual(
     config.states,
-    { ready: 4, started: 5, done: 6, cancelled: 6 },
+    { ready: 4, started: 5, review: 8, done: 6, cancelled: 6 },
     "must use the team's Beta Flow, not the member's default workflow 50",
   );
+});
+
+test("init persists an explicit direct-to-Done completion mode", async (t) => {
+  const setup = await initFixture(t);
+  const result = await invoke(
+    ["init", "--epic", "99", "--completion-mode", "done"],
+    setup,
+  );
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = await readSharedConfig(setup.directory);
+  assert.equal(config.completion_mode, "done");
+  assert.equal(result.json.completion_mode, "done");
 });
 
 test("init falls back to the member's default workflow when the Epic has no team", async (t) => {
@@ -780,7 +890,13 @@ test("init falls back to the member's default workflow when the Epic has no team
   const result = await invoke(["init", "--epic", "97"], setup);
   assert.equal(result.exitCode, 0, result.stderr);
   const config = await readSharedConfig(setup.directory);
-  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  assert.deepEqual(config.states, {
+    ready: 1,
+    started: 2,
+    review: 7,
+    done: 3,
+    cancelled: 3,
+  });
   assert.equal(result.json.workflow.source, "member");
 });
 
@@ -805,7 +921,13 @@ test("an explicit --team overrides the Epic's own team", async (t) => {
   const result = await invoke(["init", "--epic", "98", "--team", "team-1"], setup);
   assert.equal(result.exitCode, 0, result.stderr);
   const config = await readSharedConfig(setup.directory);
-  assert.deepEqual(config.states, { ready: 1, started: 2, done: 3, cancelled: 3 });
+  assert.deepEqual(config.states, {
+    ready: 1,
+    started: 2,
+    review: 7,
+    done: 3,
+    cancelled: 3,
+  });
   assert.equal(config.team_id, "team-1");
   assert.equal(result.json.workflow.source, "team-option");
 });
@@ -819,7 +941,13 @@ test("an explicit workflow still adopts the Epic team", async (t) => {
   assert.equal(result.exitCode, 0, result.stderr);
   const config = await readSharedConfig(setup.directory);
   assert.equal(config.team_id, "team-2");
-  assert.deepEqual(config.states, { ready: 4, started: 5, done: 6, cancelled: 6 });
+  assert.deepEqual(config.states, {
+    ready: 4,
+    started: 5,
+    review: 8,
+    done: 6,
+    cancelled: 6,
+  });
 });
 
 test("init rejects an explicit workflow with no discoverable states", async (t) => {

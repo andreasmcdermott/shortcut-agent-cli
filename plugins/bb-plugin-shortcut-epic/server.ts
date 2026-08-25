@@ -440,7 +440,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.agents.registerTool({
     name: "shortcut_agent_complete",
-    description: "Record completion evidence and move an owned Started Story to Done. Requires Enable agent mutations.",
+    description: "Record completion evidence and move an owned Started Story to Review (or Done when configured). Requires Enable agent mutations.",
     parameters: z
       .object({
         storyId: z.number().int().positive(),

@@ -14939,8 +14939,13 @@ var COMMANDS = {
       ["--workflow ID", "Use this Workflow instead of discovering one from the Team"],
       ["--ready-state ID", "Override the discovered Ready state"],
       ["--started-state ID", "Override the discovered Started state"],
+      ["--review-state ID", "Override the discovered Review state"],
       ["--done-state ID", "Override the discovered Done state"],
       ["--cancelled-state ID", "Override the discovered Cancelled state"],
+      [
+        "--completion-mode MODE",
+        "Move completed work to review (default) or done"
+      ],
       ["--agent ID", "Save a local default agent identity"]
     ]
   },
@@ -15014,7 +15019,7 @@ var COMMANDS = {
     usage: ["start STORY"]
   },
   complete: {
-    description: "Records completion evidence and moves an owned Story to Done.",
+    description: "Records completion evidence and moves an owned Story to Review (or Done when configured).",
     usage: ["complete STORY --summary TEXT [options]"],
     options: [
       ["--summary TEXT", "Required completion summary"],
@@ -15767,6 +15772,14 @@ async function initCommand(parsed, context) {
   const workspaceOption = strictTextOption(parsed.options, "workspace");
   const teamCommandOption = strictTextOption(parsed.options, "team");
   const requestedAgent = option(parsed.options, "agent");
+  const requestedCompletionMode = strictTextOption(
+    parsed.options,
+    "completion-mode"
+  );
+  if (requestedCompletionMode !== void 0 && !["review", "done"].includes(requestedCompletionMode)) {
+    throw argumentError("--completion-mode must be review or done");
+  }
+  const completionMode = requestedCompletionMode ?? config2.raw.completion_mode ?? "review";
   if (requestedAgent !== void 0 && (typeof requestedAgent === "boolean" || !String(requestedAgent).trim())) {
     throw argumentError("--agent must not be empty");
   }
@@ -15805,22 +15818,34 @@ async function initCommand(parsed, context) {
     return value === void 0 ? void 0 : integer2(value, `${name} state ID`);
   };
   const ready = stateOverride("ready") ?? choose("unstarted")?.id ?? choose("backlog")?.id;
-  const started = stateOverride("started") ?? choose("started")?.id;
+  const review = stateOverride("review") ?? candidates.find(
+    (state) => state.type === "started" && /review/i.test(state.name ?? "")
+  )?.id;
+  const started = stateOverride("started") ?? candidates.find(
+    (state) => state.type === "started" && Number(state.id) !== Number(review) && /start|progress|doing|develop|implement/i.test(state.name ?? "")
+  )?.id ?? candidates.find(
+    (state) => state.type === "started" && Number(state.id) !== Number(review)
+  )?.id ?? choose("started")?.id;
   const done = stateOverride("done") ?? choose("done", /done|complete|finish/i)?.id;
   const cancelled = stateOverride("cancelled") ?? choose("done", /cancel|won't|wont|abandon/i)?.id ?? done;
-  if (!ready || !started || !done) {
-    throw configError("Could not discover required ready, started, and done states", {
-      states: candidates.map(({ id, name, type }) => ({ id, name, type }))
-    });
+  if (!ready || !started || !done || completionMode === "review" && !review) {
+    throw configError(
+      completionMode === "review" && !review ? "Could not discover a review workflow state; pass --review-state ID or opt in to immediate completion with --completion-mode done" : "Could not discover required ready, started, and done states",
+      {
+        states: candidates.map(({ id, name, type }) => ({ id, name, type }))
+      }
+    );
   }
   const teamId = teamOption ?? (team ? String(team.id) : void 0);
   const document = {
     workspace,
     ...flag(parsed.options, "default-epic", true) ? { epic_id: Number(epic.id) } : {},
     ...teamId ? { team_id: teamId } : {},
+    completion_mode: completionMode,
     states: {
       ready: Number(ready),
       started: Number(started),
+      ...review ? { review: Number(review) } : {},
       done: Number(done),
       cancelled: Number(cancelled)
     }
@@ -15832,6 +15857,7 @@ async function initCommand(parsed, context) {
   }
   const {
     agent_id: legacyAgent,
+    completion_mode: _existingCompletionMode,
     workspace: _existingWorkspace,
     epic_id: _existingEpic,
     team_id: _existingTeam,
@@ -15910,6 +15936,7 @@ async function initCommand(parsed, context) {
     },
     team: team ? { id: String(team.id), name: team.name } : null,
     warnings,
+    completion_mode: completionMode,
     ...localWritten ? { local_config_file: localWritten, agent_id: String(agentToPersist) } : {},
     states: document.states
   };
@@ -15927,6 +15954,7 @@ async function configCommand(_parsed, { config: config2 }) {
     team_id: config2.teamId,
     agent_id: config2.agentId,
     agent_id_source: config2.agentSource,
+    completion_mode: config2.completionMode,
     states: config2.states
   };
 }
@@ -15942,10 +15970,13 @@ async function doctorCommand(_parsed, { client, config: config2 }) {
   const expected = {
     ready: /* @__PURE__ */ new Set(["backlog", "unstarted"]),
     started: /* @__PURE__ */ new Set(["started"]),
+    review: /* @__PURE__ */ new Set(["started"]),
     done: /* @__PURE__ */ new Set(["done"]),
     cancelled: /* @__PURE__ */ new Set(["done"])
   };
-  for (const name of ["ready", "started", "done", "cancelled"]) {
+  const requiredStates = ["ready", "started", "done", "cancelled"];
+  if (config2.completionMode === "review") requiredStates.splice(2, 0, "review");
+  for (const name of requiredStates) {
     if (!config2.states[name]) warnings.push(`${name} state is not configured`);
     else if (!configured[name]) warnings.push(`${name} state ${config2.states[name]} was not found`);
     else if (!expected[name].has(configured[name].type)) {
@@ -15962,6 +15993,7 @@ async function doctorCommand(_parsed, { client, config: config2 }) {
     epic: { id: Number(epic.id), name: epic.name },
     agent_id: config2.agentId,
     agent_id_source: config2.agentSource,
+    completion_mode: config2.completionMode,
     states: Object.fromEntries(
       Object.entries(configured).map(([name, state]) => [
         name,
@@ -16228,18 +16260,27 @@ async function lifecycleCommand(parsed, context, event) {
     allowUnowned: event === "cancel",
     force
   });
-  if (event === "complete" && !force && storyState(story, stateData.index).type !== "started") {
-    throw conflictError(
-      "invalid_story_state",
-      `Story ${storyId} must be started before it can be completed`
-    );
+  if (event === "complete" && !force) {
+    const currentState = storyState(story, stateData.index);
+    if (config2.completionMode === "review" && Number(currentState.id) === Number(config2.states.review)) {
+      throw conflictError(
+        "invalid_story_state",
+        `Story ${storyId} is already in the configured review state`
+      );
+    }
+    if (currentState.type !== "started") {
+      throw conflictError(
+        "invalid_story_state",
+        `Story ${storyId} must be started before it can be completed`
+      );
+    }
   }
   const requiredField = event === "cancel" || event === "release" ? "reason" : "summary";
   const agentEvent = eventInput(parsed, config2, event, requiredField);
-  const comment = await client.createStoryComment(storyId, agentEvent.comment);
   let body;
   if (event === "complete") {
-    body = { workflow_state_id: requireState(config2, "done") };
+    const targetState = config2.completionMode === "done" ? "done" : "review";
+    body = { workflow_state_id: requireState(config2, targetState) };
   } else if (event === "cancel") {
     body = {
       workflow_state_id: config2.states.cancelled ?? requireState(config2, "done")
@@ -16250,6 +16291,7 @@ async function lifecycleCommand(parsed, context, event) {
       workflow_state_id: requireState(config2, "ready")
     };
   }
+  const comment = await client.createStoryComment(storyId, agentEvent.comment);
   const updated = await client.updateStory(storyId, body);
   return {
     ok: true,
@@ -16568,9 +16610,11 @@ var projectConfigSchema = external_exports.object({
   team_id: external_exports.string().min(1).optional(),
   agent_id: external_exports.string().min(1).optional(),
   api_url: external_exports.string().url().optional(),
+  completion_mode: external_exports.enum(["review", "done"]).optional(),
   states: external_exports.object({
     ready: external_exports.coerce.number().int().positive().optional(),
     started: external_exports.coerce.number().int().positive().optional(),
+    review: external_exports.coerce.number().int().positive().optional(),
     done: external_exports.coerce.number().int().positive().optional(),
     cancelled: external_exports.coerce.number().int().positive().optional()
   }).passthrough().optional()
@@ -16708,9 +16752,11 @@ function effectiveConfig(configured, parsed, token, threadId) {
     agentId,
     agentSource: explicitAgent !== void 0 ? "command" : threadAgent ? "bb-thread" : configured.config.agent_id ? "project-config" : void 0,
     runId: threadId,
+    completionMode: configured.config.completion_mode ?? "review",
     states: {
       ready: optionInteger(parsed, "ready-state", configured.config.states?.ready),
       started: optionInteger(parsed, "started-state", configured.config.states?.started),
+      review: optionInteger(parsed, "review-state", configured.config.states?.review),
       done: optionInteger(parsed, "done-state", configured.config.states?.done),
       cancelled: optionInteger(parsed, "cancelled-state", configured.config.states?.cancelled)
     },
@@ -17171,7 +17217,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
   });
   bb.agents.registerTool({
     name: "shortcut_agent_complete",
-    description: "Record completion evidence and move an owned Started Story to Done. Requires Enable agent mutations.",
+    description: "Record completion evidence and move an owned Started Story to Review (or Done when configured). Requires Enable agent mutations.",
     parameters: external_exports.object({
       storyId: external_exports.number().int().positive(),
       summary: external_exports.string().min(1),

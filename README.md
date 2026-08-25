@@ -173,9 +173,10 @@ shortcut-agent init --epic 12345
 
 `init` calls v4 `whoami`, discovers the workspace slug and workflow states, and
 writes the shared project scope to `.shortcut-agent.json` in the current working
-directory. It chooses state IDs by semantic state type rather than assuming
-state names. Unlike read commands, `init` does not reuse a discovered ancestor
-config unless `--update-discovered` is explicitly supplied.
+directory. It chooses state IDs by semantic state type and uses state names to
+distinguish multiple Started- or Done-type states such as Review and Cancelled.
+Unlike read commands, `init` does not reuse a discovered ancestor config unless
+`--update-discovered` is explicitly supplied.
 
 Initialization is create-only by default. If the target already exists and the
 discovered document differs, `init` exits with code 3 and reports the existing
@@ -207,8 +208,9 @@ shortcut-agent init \
   --epic 12345 \
   --ready-state 500000001 \
   --started-state 500000002 \
-  --done-state 500000003 \
-  --cancelled-state 500000004
+  --review-state 500000003 \
+  --done-state 500000004 \
+  --cancelled-state 500000005
 ```
 
 Example configuration:
@@ -218,14 +220,29 @@ Example configuration:
   "workspace": "acme",
   "epic_id": 12345,
   "team_id": "b2c34c3a-1111-2222-3333-0123456789ab",
+  "completion_mode": "review",
   "states": {
     "ready": 500000001,
     "started": 500000002,
-    "done": 500000003,
-    "cancelled": 500000004
+    "review": 500000003,
+    "done": 500000004,
+    "cancelled": 500000005
   }
 }
 ```
+
+`completion_mode` controls the destination of `complete`. The default,
+`"review"`, moves finished implementation to the configured Review state so a
+Story continues blocking dependents until its PR is merged and the Story reaches
+Done. Projects that intentionally treat an opened PR as completion can opt into
+the previous behavior with `shortcut-agent init --epic ID --completion-mode
+done` (use `--merge` when updating an existing config), or set
+`"completion_mode": "done"` directly. A one-off override can still be made in
+Shortcut or with `edit STORY --state DONE_STATE_ID`.
+
+Existing project configs must be refreshed with `init --epic ID --merge` to
+discover `states.review` before they use the new default. Until then, `complete`
+fails with a configuration error instead of guessing among Started-type states.
 
 Read commands discover project config by walking upward from the current
 directory. Discovery stops after checking the first directory containing `.git`
@@ -402,7 +419,9 @@ shortcut-agent cancel 456 --reason 'Requirement removed'
 shortcut-agent release 456 --reason 'Agent is shutting down'
 ```
 
-- `complete` records evidence and moves to the configured Done state.
+- `complete` records evidence and moves to the configured Review state by
+  default. With project-level `completion_mode: "done"`, it moves directly to
+  Done instead.
 - `cancel` records a reason and moves to Cancelled, or Done when no distinct
   Cancelled state is configured. A Done-type cancellation unblocks dependents.
 - `release` records a reason, removes owners, and returns to the Ready state.
@@ -616,12 +635,11 @@ queries.
 **S6 — A `blocks` edge is satisfied only by a Done-type state.** There is no way
 to say "this edge clears when the blocker reaches In Review".
 
-- Human teams park Stories in a review state; agents cannot, because a Story
-  awaiting review still blocks everything downstream. One PR in review stalls
-  the whole fleet.
-- The only workaround is to have agents `complete` a Story when the PR opens.
-  That buys throughput and loses the truth: no review state, wrong cycle-time
-  data, and a rejected PR means reopening a Done Story.
+- The CLI now defaults to truthful workflow state: `complete` parks a Story in
+  Review, so one PR in review can stall dependent work until it is merged.
+- Projects may opt into moving directly to Done for throughput, accepting the
+  tradeoff: wrong cycle-time data and a rejected PR means reopening a Done
+  Story.
 - Same root cause as the cancellation problem below — edge satisfaction has
   exactly one predicate, and it is `type == "done"`.
 
@@ -706,9 +724,9 @@ Ordered by leverage. Most build on entities Shortcut already has.
    `blocks` edge clear when the blocking Story reaches a nominated state rather
    than only a Done-type one. Workflow states already carry an ordered
    `position`, so "satisfied at *In Review* or later" needs no new concept, just
-   a setting. This is what forces agents to falsely complete Stories at PR-open
-   time today, and it is the difference between a fleet that stalls on review
-   and one that does not.
+   a setting. This would remove the current project-level choice between truthful
+   Review state with a stalled dependency graph and falsely completing Stories
+   at PR-open time for throughput.
 5. **A `cancelled` workflow state type** *(S7)* — distinct from `done`, and
    explicitly *not* satisfying `blocks` edges. Today cancelling a Story falsely
    unblocks its dependents. Together with (4) this makes edge satisfaction a

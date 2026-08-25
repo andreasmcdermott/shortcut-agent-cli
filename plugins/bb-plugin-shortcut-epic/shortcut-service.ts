@@ -15,10 +15,12 @@ const projectConfigSchema = z
     team_id: z.string().min(1).optional(),
     agent_id: z.string().min(1).optional(),
     api_url: z.string().url().optional(),
+    completion_mode: z.enum(["review", "done"]).optional(),
     states: z
       .object({
         ready: z.coerce.number().int().positive().optional(),
         started: z.coerce.number().int().positive().optional(),
+        review: z.coerce.number().int().positive().optional(),
         done: z.coerce.number().int().positive().optional(),
         cancelled: z.coerce.number().int().positive().optional(),
       })
@@ -223,9 +225,11 @@ function effectiveConfig(
             ? "project-config"
             : undefined,
     runId: threadId,
+    completionMode: configured.config.completion_mode ?? "review",
     states: {
       ready: optionInteger(parsed, "ready-state", configured.config.states?.ready),
       started: optionInteger(parsed, "started-state", configured.config.states?.started),
+      review: optionInteger(parsed, "review-state", configured.config.states?.review),
       done: optionInteger(parsed, "done-state", configured.config.states?.done),
       cancelled: optionInteger(parsed, "cancelled-state", configured.config.states?.cancelled),
     },
