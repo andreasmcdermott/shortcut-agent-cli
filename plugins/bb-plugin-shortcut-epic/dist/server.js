@@ -16764,6 +16764,15 @@ function effectiveConfig(configured, parsed, token, threadId) {
     localRaw: {}
   };
 }
+function statesForCommand(command, completionMode, states) {
+  if (command !== "complete" || completionMode !== "review") return states;
+  if (!states.review) {
+    throw configError(
+      "The review workflow state is not configured; run init or pass --review-state"
+    );
+  }
+  return { ...states, done: states.review };
+}
 async function projectIdFromContext(bb, context) {
   if (context.projectId) return context.projectId;
   if (!context.threadId) return void 0;
@@ -16818,6 +16827,10 @@ function createShortcutService(bb, settings) {
       const requestedProjectId = await projectIdFromContext(bb, context);
       const configured = await resolveConfiguredProject(bb, requestedProjectId, current.project);
       const config2 = effectiveConfig(configured, parsed, token, context.threadId);
+      const commandConfig = {
+        ...config2,
+        states: statesForCommand(parsed.command, config2.completionMode, config2.states)
+      };
       const makeClient = ({ workspace = config2.workspace } = {}) => new ShortcutClient({
         token,
         workspace,
@@ -16826,7 +16839,7 @@ function createShortcutService(bb, settings) {
       });
       const client = makeClient();
       const commandPayload = await executeCommand(parsed, {
-        config: config2,
+        config: commandConfig,
         client,
         makeClient,
         env: {}
@@ -16835,6 +16848,9 @@ function createShortcutService(bb, settings) {
         exitCode: commandPayload.ok === false && parsed.command === "doctor" ? 3 : 0,
         payload: {
           ...commandPayload,
+          ...["config", "doctor"].includes(parsed.command) ? {
+            completion_mode: commandPayload.completion_mode ?? config2.completionMode
+          } : {},
           config_file: commandPayload.config_file ?? configured.configPath,
           config_source: commandPayload.config_source ?? "bb-project",
           project: configured.project

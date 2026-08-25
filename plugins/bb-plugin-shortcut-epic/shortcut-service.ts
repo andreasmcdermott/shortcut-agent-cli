@@ -238,6 +238,27 @@ function effectiveConfig(
   };
 }
 
+export function statesForCommand(
+  command: string | undefined,
+  completionMode: "review" | "done",
+  states: ReturnType<typeof effectiveConfig>["states"],
+) {
+  if (command !== "complete" || completionMode !== "review") return states;
+  if (!states.review) {
+    throw configError(
+      "The review workflow state is not configured; run init or pass --review-state",
+    );
+  }
+
+  // Path-installed bb plugins reload their TypeScript entry without necessarily
+  // evicting shared JavaScript imports outside the plugin directory. An older
+  // cached executeCommand implementation routes `complete` through `states.done`.
+  // Alias that legacy destination to Review at the plugin boundary; the current
+  // implementation reads `states.review` directly, so both generations behave
+  // identically without requiring a bb server restart.
+  return { ...states, done: states.review };
+}
+
 async function projectIdFromContext(bb: BbPluginApi, context: PluginCliContext) {
   if (context.projectId) return context.projectId;
   if (!context.threadId) return undefined;
@@ -298,6 +319,10 @@ export function createShortcutService(bb: BbPluginApi, settings: SettingsHandle)
       const requestedProjectId = await projectIdFromContext(bb, context);
       const configured = await resolveConfiguredProject(bb, requestedProjectId, current.project);
       const config = effectiveConfig(configured, parsed, token, context.threadId);
+      const commandConfig = {
+        ...config,
+        states: statesForCommand(parsed.command, config.completionMode, config.states),
+      };
       const makeClient = ({ workspace = config.workspace } = {}) =>
         new ShortcutClient({
           token,
@@ -307,7 +332,7 @@ export function createShortcutService(bb: BbPluginApi, settings: SettingsHandle)
         });
       const client = makeClient();
       const commandPayload = await executeCommand(parsed, {
-        config,
+        config: commandConfig,
         client,
         makeClient,
         env: {},
@@ -316,6 +341,12 @@ export function createShortcutService(bb: BbPluginApi, settings: SettingsHandle)
         exitCode: commandPayload.ok === false && parsed.command === "doctor" ? 3 : 0,
         payload: {
           ...commandPayload,
+          ...(["config", "doctor"].includes(parsed.command)
+            ? {
+                completion_mode:
+                  commandPayload.completion_mode ?? config.completionMode,
+              }
+            : {}),
           config_file: commandPayload.config_file ?? configured.configPath,
           config_source: commandPayload.config_source ?? "bb-project",
           project: configured.project,
