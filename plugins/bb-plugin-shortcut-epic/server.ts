@@ -296,7 +296,7 @@ export default async function plugin(bb: BbPluginApi) {
     name: "shortcut_agent_context",
     description: "Summarize ready, active, blocked, and recently completed Stories in the Shortcut Epic configured for the current bb project.",
     parameters: z.object({ epicId: z.number().int().positive().optional() }).strict(),
-    experimental_statusLabels: { pending: "Loading Shortcut work graph", completed: "Loaded Shortcut work graph" },
+    presentation: { label: { pending: "Loading Shortcut work graph", completed: "Loaded Shortcut work graph" } },
     execute({ epicId }, context) {
       return shortcut.executeTool(
         ["context", ...(epicId ? ["--epic", String(epicId)] : [])],
@@ -315,7 +315,7 @@ export default async function plugin(bb: BbPluginApi) {
         allComments: z.boolean().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Reading Shortcut Story", completed: "Read Shortcut Story" },
+    presentation: { label: { pending: "Reading Shortcut Story", completed: "Read Shortcut Story" } },
     execute({ storyId, allComments }, context) {
       return shortcut.executeTool(
         ["show", String(storyId), ...(allComments ? ["--all-comments"] : [])],
@@ -341,7 +341,7 @@ export default async function plugin(bb: BbPluginApi) {
         epicId: z.number().int().positive().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Creating Shortcut Story", completed: "Created Shortcut Story" },
+    presentation: { label: { pending: "Creating Shortcut Story", completed: "Created Shortcut Story" } },
     execute(input, context) {
       const argv = ["create", "--title", input.title, "--description", input.description];
       if (input.type) argv.push("--type", input.type);
@@ -372,7 +372,7 @@ export default async function plugin(bb: BbPluginApi) {
         clearTeam: z.boolean().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Editing Shortcut Story", completed: "Edited Shortcut Story" },
+    presentation: { label: { pending: "Editing Shortcut Story", completed: "Edited Shortcut Story" } },
     execute(input, context) {
       const argv = ["edit", String(input.storyId)];
       if (input.title !== undefined) argv.push("--title", input.title);
@@ -398,7 +398,7 @@ export default async function plugin(bb: BbPluginApi) {
         allowCrossEpic: z.boolean().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Adding Shortcut dependency", completed: "Added Shortcut dependency" },
+    presentation: { label: { pending: "Adding Shortcut dependency", completed: "Added Shortcut dependency" } },
     execute(input, context) {
       return shortcut.executeTool(
         [
@@ -424,7 +424,7 @@ export default async function plugin(bb: BbPluginApi) {
         epicId: z.number().int().positive().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Claiming Shortcut Story", completed: "Claimed Shortcut Story" },
+    presentation: { label: { pending: "Claiming Shortcut Story", completed: "Claimed Shortcut Story" } },
     execute(input, context) {
       return shortcut.executeTool(
         [
@@ -453,7 +453,7 @@ export default async function plugin(bb: BbPluginApi) {
         epicId: z.number().int().positive().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Completing Shortcut Story", completed: "Completed Shortcut Story" },
+    presentation: { label: { pending: "Completing Shortcut Story", completed: "Completed Shortcut Story" } },
     execute(input, context) {
       const argv = ["complete", String(input.storyId), "--summary", input.summary];
       for (const [name, value] of [
@@ -482,7 +482,7 @@ export default async function plugin(bb: BbPluginApi) {
         epicId: z.number().int().positive().optional(),
       })
       .strict(),
-    experimental_statusLabels: { pending: "Releasing Shortcut Story", completed: "Released Shortcut Story" },
+    presentation: { label: { pending: "Releasing Shortcut Story", completed: "Released Shortcut Story" } },
     execute(input, context) {
       return shortcut.executeTool(
         [
