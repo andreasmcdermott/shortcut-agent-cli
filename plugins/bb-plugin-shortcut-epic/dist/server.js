@@ -16912,6 +16912,26 @@ var graphResponseSchema = external_exports.object({
   mutationsEnabled: external_exports.boolean(),
   generatedAt: external_exports.string()
 });
+var storyDetailSchema = external_exports.object({
+  id: external_exports.number().int().positive(),
+  title: external_exports.string(),
+  url: external_exports.string().nullable(),
+  description: external_exports.string(),
+  stateName: external_exports.string(),
+  stateType: external_exports.string(),
+  storyType: external_exports.string().nullable(),
+  blocked: external_exports.boolean(),
+  owners: external_exports.array(external_exports.string()),
+  updatedAt: external_exports.string().nullable(),
+  comments: external_exports.array(
+    external_exports.object({
+      id: external_exports.number().int(),
+      author: external_exports.string().nullable(),
+      text: external_exports.string(),
+      createdAt: external_exports.string().nullable()
+    }).strict()
+  )
+}).strict();
 var ownedEpicSchema = external_exports.object({
   id: external_exports.number().int().positive(),
   name: external_exports.string(),
@@ -16932,6 +16952,13 @@ var rpcContract = defineRpcContract({
     }).strict(),
     output: graphResponseSchema
   },
+  loadStory: {
+    input: external_exports.object({
+      storyId: external_exports.number().int().positive(),
+      projectId: external_exports.string().nullable()
+    }).strict(),
+    output: storyDetailSchema
+  },
   startWork: {
     input: external_exports.object({
       storyId: external_exports.number().int().positive(),
@@ -16950,9 +16977,41 @@ var shownStorySchema = external_exports.object({
     id: external_exports.number().int(),
     title: external_exports.string().nullish(),
     app_url: external_exports.string().nullish(),
-    description: external_exports.string().nullish()
-  })
-});
+    description: external_exports.string().nullish(),
+    state: external_exports.object({
+      name: external_exports.string().nullish(),
+      type: external_exports.string().nullish()
+    }).nullish(),
+    story_type: external_exports.string().nullish(),
+    blocked: external_exports.boolean().nullish(),
+    owners: external_exports.array(
+      external_exports.object({
+        id: external_exports.union([external_exports.string(), external_exports.number()]),
+        name: external_exports.string().nullish()
+      })
+    ).nullish(),
+    updated_at: external_exports.string().nullish()
+  }).passthrough(),
+  comments: external_exports.array(
+    external_exports.object({
+      id: external_exports.number().int(),
+      author: external_exports.unknown().optional(),
+      text: external_exports.string().nullish(),
+      created_at: external_exports.string().nullish()
+    }).passthrough()
+  ).optional()
+}).passthrough();
+function commentAuthorName(author) {
+  if (typeof author === "string" && author.trim()) return author;
+  if (!author || typeof author !== "object") return null;
+  const candidate = author;
+  for (const key of ["name", "mention_name", "username", "email"]) {
+    if (typeof candidate[key] === "string" && candidate[key].trim()) {
+      return candidate[key];
+    }
+  }
+  return null;
+}
 function cliFailure(payload, fallback) {
   const error51 = payload.error;
   if (error51 && typeof error51 === "object" && "message" in error51) {
@@ -17025,6 +17084,12 @@ async function plugin(bb) {
       label: "Enable agent mutations",
       description: "Allow bb plugin commands and native agent tools to create or change Shortcut Stories. Read-only commands and tools remain available when disabled.",
       default: false
+    },
+    openStoriesInPlugin: {
+      type: "boolean",
+      label: "Open Stories in Shortcut Agent",
+      description: "When on, clicking a Story card opens its details in the current view. When off, cards open the Shortcut website. The card menu always includes Open in Shortcut.",
+      default: true
     }
   });
   const initial = await settings.get();
@@ -17105,7 +17170,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
     name: "shortcut_agent_context",
     description: "Summarize ready, active, blocked, and recently completed Stories in the Shortcut Epic configured for the current bb project.",
     parameters: external_exports.object({ epicId: external_exports.number().int().positive().optional() }).strict(),
-    experimental_statusLabels: { pending: "Loading Shortcut work graph", completed: "Loaded Shortcut work graph" },
+    presentation: { label: { pending: "Loading Shortcut work graph", completed: "Loaded Shortcut work graph" } },
     execute({ epicId }, context) {
       return shortcut.executeTool(
         ["context", ...epicId ? ["--epic", String(epicId)] : []],
@@ -17121,7 +17186,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       storyId: external_exports.number().int().positive(),
       allComments: external_exports.boolean().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Reading Shortcut Story", completed: "Read Shortcut Story" },
+    presentation: { label: { pending: "Reading Shortcut Story", completed: "Read Shortcut Story" } },
     execute({ storyId, allComments }, context) {
       return shortcut.executeTool(
         ["show", String(storyId), ...allComments ? ["--all-comments"] : []],
@@ -17144,7 +17209,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       relatedTo: external_exports.array(external_exports.number().int().positive()).optional(),
       epicId: external_exports.number().int().positive().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Creating Shortcut Story", completed: "Created Shortcut Story" },
+    presentation: { label: { pending: "Creating Shortcut Story", completed: "Created Shortcut Story" } },
     execute(input, context) {
       const argv = ["create", "--title", input.title, "--description", input.description];
       if (input.type) argv.push("--type", input.type);
@@ -17172,7 +17237,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       teamId: external_exports.string().min(1).optional(),
       clearTeam: external_exports.boolean().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Editing Shortcut Story", completed: "Edited Shortcut Story" },
+    presentation: { label: { pending: "Editing Shortcut Story", completed: "Edited Shortcut Story" } },
     execute(input, context) {
       const argv = ["edit", String(input.storyId)];
       if (input.title !== void 0) argv.push("--title", input.title);
@@ -17195,7 +17260,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       otherStoryId: external_exports.number().int().positive(),
       allowCrossEpic: external_exports.boolean().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Adding Shortcut dependency", completed: "Added Shortcut dependency" },
+    presentation: { label: { pending: "Adding Shortcut dependency", completed: "Added Shortcut dependency" } },
     execute(input, context) {
       return shortcut.executeTool(
         [
@@ -17218,7 +17283,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       agentId: external_exports.string().min(1).optional(),
       epicId: external_exports.number().int().positive().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Claiming Shortcut Story", completed: "Claimed Shortcut Story" },
+    presentation: { label: { pending: "Claiming Shortcut Story", completed: "Claimed Shortcut Story" } },
     execute(input, context) {
       return shortcut.executeTool(
         [
@@ -17244,7 +17309,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       agentId: external_exports.string().min(1).optional(),
       epicId: external_exports.number().int().positive().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Completing Shortcut Story", completed: "Completed Shortcut Story" },
+    presentation: { label: { pending: "Completing Shortcut Story", completed: "Completed Shortcut Story" } },
     execute(input, context) {
       const argv = ["complete", String(input.storyId), "--summary", input.summary];
       for (const [name, value] of [
@@ -17270,7 +17335,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
       agentId: external_exports.string().min(1).optional(),
       epicId: external_exports.number().int().positive().optional()
     }).strict(),
-    experimental_statusLabels: { pending: "Releasing Shortcut Story", completed: "Released Shortcut Story" },
+    presentation: { label: { pending: "Releasing Shortcut Story", completed: "Released Shortcut Story" } },
     execute(input, context) {
       return shortcut.executeTool(
         [
@@ -17430,6 +17495,37 @@ bb integration: project scope and API origin are server-controlled; init, --conf
         configuredEpicId: configured.config.epic_id ?? null,
         mutationsEnabled: current.enableAgentMutations,
         generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    },
+    async loadStory({ storyId, projectId }) {
+      const detail = await shortcut.execute(["show", String(storyId)], {
+        projectId: projectId ?? void 0
+      });
+      if (detail.exitCode !== 0) {
+        throw cliFailure(detail.payload, `Could not read Story ${storyId}.`);
+      }
+      const shown = shownStorySchema.safeParse(detail.payload);
+      if (!shown.success) {
+        throw new Error(`Shortcut returned an invalid response for Story ${storyId}.`);
+      }
+      const story = shown.data.story;
+      return {
+        id: story.id,
+        title: story.title ?? `Story ${story.id}`,
+        url: story.app_url ?? null,
+        description: story.description ?? "",
+        stateName: story.state?.name ?? story.state?.type ?? "Unknown",
+        stateType: story.state?.type ?? "unknown",
+        storyType: story.story_type ?? null,
+        blocked: story.blocked ?? false,
+        owners: (story.owners ?? []).map((owner) => owner.name ?? String(owner.id)),
+        updatedAt: story.updated_at ?? null,
+        comments: (shown.data.comments ?? []).map((comment) => ({
+          id: comment.id,
+          author: commentAuthorName(comment.author),
+          text: comment.text ?? "",
+          createdAt: comment.created_at ?? null
+        }))
       };
     },
     async startWork({ storyId, projectId, epicId }) {

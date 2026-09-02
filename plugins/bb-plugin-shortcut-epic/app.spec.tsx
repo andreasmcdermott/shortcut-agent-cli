@@ -71,6 +71,27 @@ const graph: GraphResponse = {
   generatedAt: "2026-08-19T17:00:00.000Z",
 };
 
+const storyDetail = {
+  id: 2,
+  title: longStoryTitle,
+  url: "https://app.shortcut.com/acme/story/2",
+  description: "Keep the Story details inside bb.",
+  stateName: "Ready",
+  stateType: "unstarted",
+  storyType: "feature",
+  blocked: false,
+  owners: [],
+  updatedAt: "2026-08-19T17:00:00.000Z",
+  comments: [
+    {
+      id: 20,
+      author: "Agent owner",
+      text: "This is ready to pick up.",
+      createdAt: "2026-08-19T16:00:00.000Z",
+    },
+  ],
+};
+
 function installLocalStorage() {
   const values = new Map<string, string>();
   Object.defineProperty(window, "localStorage", {
@@ -118,6 +139,7 @@ describe("Shortcut Agent nav panel", () => {
             ],
           }),
           loadGraph: () => graph,
+          loadStory: () => storyDetail,
           startWork: () => ({
             threadId: "thread_1",
             storyId: 2,
@@ -193,6 +215,88 @@ describe("Shortcut Agent nav panel", () => {
     slot.lifecycle.unmount();
   });
 
+  it("opens Story details in a modal when the setting is enabled", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const slot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      {
+        context: { projectId: "proj_1" },
+        settings: { openStoriesInPlugin: true },
+        rpc: {
+          listOwnedEpics: () => ({ epics: [] }),
+          loadGraph: () => graph,
+          loadStory: () => storyDetail,
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
+      },
+    );
+
+    await slot.findByText("Ship agent workflow");
+    fireEvent.click(
+      slot.getByRole("button", {
+        name: `View sc-2: ${longStoryTitle} in Shortcut Agent`,
+      }),
+    );
+
+    await slot.findByText("Keep the Story details inside bb.");
+    expect(slot.getByRole("dialog")).toBeTruthy();
+    const scrollRegion = slot.getByTestId("story-details-scroll-region");
+    expect(scrollRegion.classList.contains("min-h-0")).toBe(true);
+    expect(scrollRegion.classList.contains("flex-1")).toBe(true);
+    expect(scrollRegion.classList.contains("overflow-y-auto")).toBe(true);
+    expect(slot.inspection.rpcCalls).toContainEqual({
+      method: "loadStory",
+      input: { storyId: 2, projectId: "proj_1" },
+    });
+    const shortcutLink = slot.getByRole("link", { name: "Open in Shortcut" });
+    expect(shortcutLink.getAttribute("href")).toBe(
+      "https://app.shortcut.com/acme/story/2",
+    );
+
+    slot.lifecycle.unmount();
+  });
+
+  it("keeps card clicks pointed at Shortcut when the setting is disabled", async () => {
+    const app = await loadPluginApp(() => import("./app.js"));
+    type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
+    const slot = renderSlot<PanelProps, typeof rpcContract>(
+      app.navPanels[0]!,
+      { subPath: "" },
+      {
+        context: { projectId: "proj_1" },
+        settings: { openStoriesInPlugin: false },
+        rpc: {
+          listOwnedEpics: () => ({ epics: [] }),
+          loadGraph: () => graph,
+          loadStory: () => storyDetail,
+          startWork: () => ({
+            threadId: "thread_1",
+            storyId: 2,
+            title: longStoryTitle,
+          }),
+        },
+      },
+    );
+
+    await slot.findByText("Ship agent workflow");
+    const shortcutLink = slot.getByRole("link", {
+      name: `Open sc-2: ${longStoryTitle} in Shortcut`,
+    });
+    expect(shortcutLink.getAttribute("href")).toBe(
+      "https://app.shortcut.com/acme/story/2",
+    );
+    expect(shortcutLink.getAttribute("target")).toBe("_blank");
+    expect(slot.queryByRole("dialog")).toBeNull();
+
+    slot.lifecycle.unmount();
+  });
+
   it("claims a ready Story from the card menu and opens the new thread", async () => {
     const app = await loadPluginApp(() => import("./app.js"));
     type PanelProps = ComponentProps<(typeof app.navPanels)[number]["component"]>;
@@ -204,6 +308,7 @@ describe("Shortcut Agent nav panel", () => {
         rpc: {
           listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => graph,
+          loadStory: () => storyDetail,
           startWork: () => ({
             threadId: "thread_1",
             storyId: 2,
@@ -247,6 +352,7 @@ describe("Shortcut Agent nav panel", () => {
         rpc: {
           listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => ({ ...graph, mutationsEnabled: false }),
+          loadStory: () => storyDetail,
           startWork: () => ({
             threadId: "thread_1",
             storyId: 2,
@@ -284,6 +390,7 @@ describe("Shortcut Agent nav panel", () => {
         rpc: {
           listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => graph,
+          loadStory: () => storyDetail,
           startWork: () => ({
             threadId: "thread_1",
             storyId: 2,
@@ -315,6 +422,7 @@ describe("Shortcut Agent nav panel", () => {
             throw new Error("Shortcut unavailable");
           },
           loadGraph: () => graph,
+          loadStory: () => storyDetail,
           startWork: () => ({
             threadId: "thread_1",
             storyId: 2,
@@ -349,6 +457,7 @@ describe("Shortcut Agent nav panel", () => {
         return { epics: ownedEpics };
       },
       loadGraph: () => graph,
+      loadStory: () => storyDetail,
       startWork: () => ({
         threadId: "thread_1",
         storyId: 2,
@@ -393,6 +502,7 @@ describe("Shortcut Agent nav panel", () => {
         rpc: {
           listOwnedEpics: () => ({ epics: [] }),
           loadGraph: () => new Promise<GraphResponse>(() => {}),
+          loadStory: () => storyDetail,
           startWork: () => ({
             threadId: "thread_1",
             storyId: 2,
@@ -423,6 +533,7 @@ describe("Shortcut Agent nav panel", () => {
         graphRequests += 1;
         return holdGraphRefresh ? new Promise<GraphResponse>(() => {}) : graph;
       },
+      loadStory: () => storyDetail,
       startWork: () => ({
         threadId: "thread_1",
         storyId: 2,

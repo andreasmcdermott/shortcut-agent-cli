@@ -68,6 +68,33 @@ const graphResponseSchema = z.object({
 
 export type GraphResponse = z.infer<typeof graphResponseSchema>;
 
+const storyDetailSchema = z
+  .object({
+    id: z.number().int().positive(),
+    title: z.string(),
+    url: z.string().nullable(),
+    description: z.string(),
+    stateName: z.string(),
+    stateType: z.string(),
+    storyType: z.string().nullable(),
+    blocked: z.boolean(),
+    owners: z.array(z.string()),
+    updatedAt: z.string().nullable(),
+    comments: z.array(
+      z
+        .object({
+          id: z.number().int(),
+          author: z.string().nullable(),
+          text: z.string(),
+          createdAt: z.string().nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type StoryDetail = z.infer<typeof storyDetailSchema>;
+
 const ownedEpicSchema = z
   .object({
     id: z.number().int().positive(),
@@ -98,6 +125,15 @@ export const rpcContract = defineRpcContract({
       .strict(),
     output: graphResponseSchema,
   },
+  loadStory: {
+    input: z
+      .object({
+        storyId: z.number().int().positive(),
+        projectId: z.string().nullable(),
+      })
+      .strict(),
+    output: storyDetailSchema,
+  },
   startWork: {
     input: z
       .object({
@@ -116,14 +152,59 @@ export const rpcContract = defineRpcContract({
   },
 });
 
-const shownStorySchema = z.object({
-  story: z.object({
-    id: z.number().int(),
-    title: z.string().nullish(),
-    app_url: z.string().nullish(),
-    description: z.string().nullish(),
-  }),
-});
+const shownStorySchema = z
+  .object({
+    story: z
+      .object({
+        id: z.number().int(),
+        title: z.string().nullish(),
+        app_url: z.string().nullish(),
+        description: z.string().nullish(),
+        state: z
+          .object({
+            name: z.string().nullish(),
+            type: z.string().nullish(),
+          })
+          .nullish(),
+        story_type: z.string().nullish(),
+        blocked: z.boolean().nullish(),
+        owners: z
+          .array(
+            z.object({
+              id: z.union([z.string(), z.number()]),
+              name: z.string().nullish(),
+            }),
+          )
+          .nullish(),
+        updated_at: z.string().nullish(),
+      })
+      .passthrough(),
+    comments: z
+      .array(
+        z
+          .object({
+            id: z.number().int(),
+            author: z.unknown().optional(),
+            text: z.string().nullish(),
+            created_at: z.string().nullish(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
+function commentAuthorName(author: unknown) {
+  if (typeof author === "string" && author.trim()) return author;
+  if (!author || typeof author !== "object") return null;
+  const candidate = author as Record<string, unknown>;
+  for (const key of ["name", "mention_name", "username", "email"]) {
+    if (typeof candidate[key] === "string" && candidate[key].trim()) {
+      return candidate[key];
+    }
+  }
+  return null;
+}
 
 function cliFailure(payload: Record<string, unknown>, fallback: string) {
   const error = payload.error;
@@ -213,6 +294,13 @@ export default async function plugin(bb: BbPluginApi) {
       description:
         "Allow bb plugin commands and native agent tools to create or change Shortcut Stories. Read-only commands and tools remain available when disabled.",
       default: false,
+    },
+    openStoriesInPlugin: {
+      type: "boolean",
+      label: "Open Stories in Shortcut Agent",
+      description:
+        "When on, clicking a Story card opens its details in the current view. When off, cards open the Shortcut website. The card menu always includes Open in Shortcut.",
+      default: true,
     },
   });
 
@@ -679,6 +767,38 @@ export default async function plugin(bb: BbPluginApi) {
         configuredEpicId: configured.config.epic_id ?? null,
         mutationsEnabled: current.enableAgentMutations,
         generatedAt: new Date().toISOString(),
+      };
+    },
+
+    async loadStory({ storyId, projectId }) {
+      const detail = await shortcut.execute(["show", String(storyId)], {
+        projectId: projectId ?? undefined,
+      });
+      if (detail.exitCode !== 0) {
+        throw cliFailure(detail.payload, `Could not read Story ${storyId}.`);
+      }
+      const shown = shownStorySchema.safeParse(detail.payload);
+      if (!shown.success) {
+        throw new Error(`Shortcut returned an invalid response for Story ${storyId}.`);
+      }
+      const story = shown.data.story;
+      return {
+        id: story.id,
+        title: story.title ?? `Story ${story.id}`,
+        url: story.app_url ?? null,
+        description: story.description ?? "",
+        stateName: story.state?.name ?? story.state?.type ?? "Unknown",
+        stateType: story.state?.type ?? "unknown",
+        storyType: story.story_type ?? null,
+        blocked: story.blocked ?? false,
+        owners: (story.owners ?? []).map((owner) => owner.name ?? String(owner.id)),
+        updatedAt: story.updated_at ?? null,
+        comments: (shown.data.comments ?? []).map((comment) => ({
+          id: comment.id,
+          author: commentAuthorName(comment.author),
+          text: comment.text ?? "",
+          createdAt: comment.created_at ?? null,
+        })),
       };
     },
 

@@ -7,12 +7,19 @@ import {
   type FormEvent,
 } from "react";
 import {
+  Markdown,
   definePluginApp,
   useBbContext,
   useBbNavigate,
   useRpc,
+  useSettings,
 } from "@get-bb/plugin-sdk/app";
-import type { GraphResponse, OwnedEpic, rpcContract } from "./server";
+import type {
+  GraphResponse,
+  OwnedEpic,
+  StoryDetail,
+  rpcContract,
+} from "./server";
 import { layoutGraph, type GraphNode, type NodeStatus } from "./graph.js";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +31,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const MIN_ZOOM = 0.02;
@@ -131,17 +145,28 @@ function StoryMenu({
 function StoryNode({
   node,
   mutationsEnabled,
+  openInPlugin,
   starting,
+  onOpen,
   onStartWork,
 }: {
   node: GraphNode;
   mutationsEnabled: boolean;
+  openInPlugin: boolean;
   starting: boolean;
+  onOpen: () => void;
   onStartWork: () => void;
 }) {
   return (
     <div className={cn(nodeClass(node), "relative")}>
-      {node.url ? (
+      {openInPlugin ? (
+        <button
+          type="button"
+          className="absolute inset-0 rounded-lg"
+          aria-label={`View sc-${node.id}: ${node.title} in Shortcut Agent`}
+          onClick={onOpen}
+        />
+      ) : node.url ? (
         <a
           className="absolute inset-0 rounded-lg"
           href={node.url}
@@ -186,6 +211,147 @@ function StoryNode({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function displayDate(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function StoryDetailsDialog({
+  node,
+  projectId,
+  onOpenChange,
+}: {
+  node: GraphNode | null;
+  projectId: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const rpc = useRpc<typeof rpcContract>();
+  const [detail, setDetail] = useState<StoryDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!node) {
+      setDetail(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    let current = true;
+    setDetail(null);
+    setError(null);
+    setLoading(true);
+    void rpc
+      .call("loadStory", { storyId: node.id, projectId })
+      .then((result) => {
+        if (current) setDetail(result);
+      })
+      .catch((cause) => {
+        if (current) setError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [node, projectId, rpc]);
+
+  const visible = detail?.id === node?.id ? detail : null;
+  const updatedAt = displayDate(visible?.updatedAt ?? node?.updatedAt ?? null);
+
+  return (
+    <Dialog open={node !== null} onOpenChange={onOpenChange}>
+      <DialogContent aria-describedby="shortcut-agent-story-summary">
+        <DialogHeader>
+          <DialogDescription id="shortcut-agent-story-summary">
+            sc-{node?.id} · {visible?.stateName ?? node?.stateName ?? "Loading…"}
+          </DialogDescription>
+          <DialogTitle>{visible?.title ?? node?.title ?? "Story details"}</DialogTitle>
+        </DialogHeader>
+
+        <div
+          data-testid="story-details-scroll-region"
+          className="min-h-0 flex-1 overflow-y-auto pr-1"
+        >
+          {loading ? (
+            <div className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
+              Loading Story…
+            </div>
+          ) : error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          ) : visible ? (
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {visible.storyType ? (
+                  <span className="capitalize">{visible.storyType}</span>
+                ) : null}
+                {visible.blocked ? (
+                  <span className="font-medium text-destructive">Blocked</span>
+                ) : null}
+                <span>{visible.owners.join(", ") || "Unowned"}</span>
+                {updatedAt ? <span>Updated {updatedAt}</span> : null}
+              </div>
+
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Description
+                </h3>
+                {visible.description.trim() ? (
+                  <Markdown content={visible.description} className="text-sm text-foreground" />
+                ) : (
+                  <p className="text-sm text-muted-foreground">No description.</p>
+                )}
+              </section>
+
+              {visible.comments.length > 0 ? (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Recent comments
+                  </h3>
+                  <div className="space-y-2">
+                    {visible.comments.map((comment) => (
+                      <article key={comment.id} className="rounded-md border border-border bg-card p-3">
+                        <div className="mb-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                          <span>{comment.author ?? "Shortcut user"}</span>
+                          {displayDate(comment.createdAt) ? (
+                            <span>{displayDate(comment.createdAt)}</span>
+                          ) : null}
+                        </div>
+                        <Markdown content={comment.text} className="text-sm text-foreground" />
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 justify-end border-t border-border pt-4">
+          {(visible?.url ?? node?.url) ? (
+            <Button asChild size="sm" variant="outline">
+              <a
+                href={(visible?.url ?? node?.url)!}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open in Shortcut
+              </a>
+            </Button>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -504,6 +670,8 @@ function EpicGraph({ subPath }: { subPath: string }) {
   const { projectId } = useBbContext();
   const navigate = useBbNavigate();
   const rpc = useRpc<typeof rpcContract>();
+  const { values: settings } = useSettings();
+  const openStoriesInPlugin = settings?.openStoriesInPlugin !== false;
   const routeEpicId = useMemo(() => selectedEpicId(subPath), [subPath]);
   const [rememberedEpicId, setRememberedEpicId] = useState(() =>
     routeEpicId === null ? readRememberedEpic(projectId) : null,
@@ -527,6 +695,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
   const [startingStoryId, setStartingStoryId] = useState<number | null>(null);
+  const [selectedStory, setSelectedStory] = useState<GraphNode | null>(null);
   const [zoom, setZoom] = useState(1);
   const graphScrollerRef = useRef<HTMLDivElement>(null);
 
@@ -922,7 +1091,9 @@ function EpicGraph({ subPath }: { subPath: string }) {
                   <StoryNode
                     node={node}
                     mutationsEnabled={data.mutationsEnabled}
+                    openInPlugin={openStoriesInPlugin}
                     starting={startingStoryId === node.id}
+                    onOpen={() => setSelectedStory(node)}
                     onStartWork={() => void startWork(node.id, data.epic.id)}
                   />
                 </div>
@@ -931,6 +1102,13 @@ function EpicGraph({ subPath }: { subPath: string }) {
           </svg>
         )}
       </div>
+      <StoryDetailsDialog
+        node={selectedStory}
+        projectId={projectId}
+        onOpenChange={(open) => {
+          if (!open) setSelectedStory(null);
+        }}
+      />
     </div>
   );
 }
