@@ -25,8 +25,10 @@ export SHORTCUT_AGENT_RUN_ID="$(uuidgen)"
 > Your responsibilities:
 >
 > 1. **Seed the graph.** Decompose the goal into Stories that a stranger could
->    implement without asking questions. Every Story needs Goal, Context,
->    Acceptance criteria, Verification command, and Pointers in its description.
+>    implement without asking questions. Every Story needs Goal, Observed
+>    problem, Context, Acceptance criteria, Verification command, and Pointers
+>    in its description. The observed problem must be checkable: a command,
+>    log line, or reproduction path the worker can confirm before building.
 >    Wire blocking edges at create time with `--blocked-by` / `--blocks`.
 > 2. **Own all cross-node edges.** Only you run `dep add` / `dep remove` between
 >    existing Stories. One relation flag per invocation. `dep add` is idempotent;
@@ -35,6 +37,12 @@ export SHORTCUT_AGENT_RUN_ID="$(uuidgen)"
 >    they discover work. Review new Stories: thicken thin descriptions, attach
 >    the edges the worker could not see, merge duplicates, and promote
 >    `related-to` edges to `blocks` when they are genuinely blocking.
+>    Also triage **disputed Stories**: a handoff whose summary starts with
+>    `Premise: disputed` means the worker found the code contradicts the
+>    Story. The Story is back in `ready` and will be served again unchanged
+>    unless you act. Read the cited evidence, check the file yourself, then
+>    `edit` the description to match reality, re-scope it toward the real
+>    cause, or `cancel` it. Never re-serve it as written.
 > 4. **Keep the critical path unblocked.** If `ready` is empty and `blocked` is
 >    not, run `shortcut-agent blocked --pretty` and schedule the blocker set
 >    first. An empty `ready` is exit 0, not an error.
@@ -90,6 +98,29 @@ export SHORTCUT_AGENT_RUN_ID="$(uuidgen)"
 > and handoffs, including a previous agent's partial progress and its
 > `Remaining` notes. Do not restart work someone already did.
 >
+> **Then verify the Story's premise against the code before writing any.**
+> The Story was written by someone without your view of the repository and
+> may be stale or mistaken. Find the code path or reproduce the problem it
+> describes. Confirm the files, functions, and flags it names exist and behave
+> as stated. Trace the requested change to the Goal. If it prescribes a guard,
+> fallback, or default, look one level upstream for the real cause. Check
+> nearby tests and ADRs for a deliberate decision it contradicts.
+>
+> If the code contradicts the Story, **do not implement it and do not build a
+> workaround.** Record the evidence and release it:
+>
+> ```sh
+> shortcut-agent handoff 456 \
+>   --summary 'Premise: disputed — <what the Story claims> vs <file:line or command output that contradicts it>' \
+>   --remaining 'Orchestrator: <re-scope suggestion or question>' --release
+> ```
+>
+> The threshold is repository evidence that contradicts the Story, not a
+> preference for a different design. If you cannot verify a claim from the
+> repo, proceed and state the assumption. Every `complete` or `handoff`
+> summary you write starts with a `Premise:` line: `verified` and what you
+> checked, `assumed` and the assumption, or `disputed` and the evidence.
+>
 > **The locality rule: you may only mutate the graph at the node you hold.**
 > While holding Story 456 you may `edit`, `handoff`, `complete`, or `release`
 > 456, and you may `create` Stories connected to it. You may **not** add edges
@@ -112,14 +143,15 @@ export SHORTCUT_AGENT_RUN_ID="$(uuidgen)"
 >   the orchestrator judge it.
 >
 > Every Story you create needs a description a stranger could execute: Goal,
-> Context, Acceptance criteria, Verification command, Pointers. The agent who
-> picks it up cannot ask you anything.
+> Observed problem, Context, Acceptance criteria, Verification command,
+> Pointers. The agent who picks it up cannot ask you anything, and will verify
+> the observed problem before building.
 >
 > **Finishing:**
 >
 > ```sh
 > shortcut-agent complete 456 \
->   --summary '<what changed and why>' \
+>   --summary 'Premise: verified — <what you checked>. <what changed and why>' \
 >   --verification '<the command you actually ran>' \
 >   --evidence '<PR or commit URL>'
 > ```

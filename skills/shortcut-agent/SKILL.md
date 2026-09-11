@@ -73,9 +73,13 @@ implementation, and each one changes what the protocol has to look like.
    Exit code `4` (`claim_conflict`) is *normal contention*, not a failure. Either
    serialize claims through one orchestrator, or have workers retry on `4`.
 
-4. **The description is the entire handoff.** The agent that implements a Story
-   usually has no shared context with the agent that wrote it. A Story whose
-   description does not stand alone is a Story that will be implemented wrong.
+4. **The description is the entire handoff, and it can be wrong.** The agent
+   that implements a Story usually has no shared context with the agent that
+   wrote it. A Story whose description does not stand alone is a Story that
+   will be implemented wrong. A Story whose description is stale or mistaken
+   will be implemented faithfully and still be wrong. Workers verify the
+   premise against the code before implementing; see "Verify the premise
+   before writing code" below.
 
 5. **Cycle safety is only checked for same-Epic `blocks` edges.** Cross-Epic
    edges require `--allow-cross-epic` and are explicitly unproven. Keep one
@@ -157,12 +161,18 @@ Split responsibilities so that graph *shape* has a single author while graph
   `dep add` / `dep remove` between existing nodes.
 - Triages worker-created Stories: fixes thin descriptions, attaches the edges
   the worker could not see, merges duplicates.
+- Triages disputed Stories: when a worker releases a Story with a
+  `Premise: disputed` handoff, reads the evidence, then rewrites, re-scopes,
+  or cancels the Story. Does not re-serve it unchanged.
 - Owns `cancel`, and owns all `--force` recovery of stale claims.
 - Decides when the Epic is finished.
 
 ### Worker — N in parallel, owns one node at a time
 
-- Claims one Story, implements it, sends it to review with `complete`.
+- Claims one Story, verifies its premise against the code, implements it,
+  sends it to review with `complete`.
+- Disputes rather than implements when the code contradicts the Story. Posts
+  the evidence and releases; never ships a workaround for a wrong requirement.
 - May create work **only at its own node** (see the locality rule).
 - `handoff`s rather than dying silently when out of context or blocked.
 - Never runs `cancel`, never runs `--force`, never edits edges between Stories
@@ -174,6 +184,10 @@ Split responsibilities so that graph *shape* has a single author while graph
 human review can follow the normal Shortcut workflow. If review itself should
 be autonomous, claimable work, model it as a separate *Story* and relate it to
 the implementation without relying on the implementation Story to unblock it.
+
+A reviewer checks the Story before the diff. A change that faithfully
+implements a Story the code disproves fails review, and the reviewer says why
+with evidence. A `complete` summary with no `Premise:` line is sent back.
 
 ## The locality rule
 
@@ -199,9 +213,10 @@ its own Story, or a `related-to` Story describing the needed change.
 shortcut-agent ready --pretty          # 1. find work (already excludes claims)
 shortcut-agent show 456                # 2. read description + prior agent events
 shortcut-agent start 456               # 3. claim (Mode B only); exit 4 = re-pick
+# 4. verify the premise against the code (see below); dispute or proceed
 # ... implement ...
 shortcut-agent complete 456 \
-  --summary 'Implemented cache invalidation on write path' \
+  --summary 'Premise: verified — TTL is 0 in config/defaults.ts:41, test reproduces stale read. Implemented cache invalidation on write path' \
   --verification 'npm test -- cache' \
   --evidence 'https://github.com/acme/repo/pull/123'
 ```
@@ -210,9 +225,48 @@ Always `show` before starting work. The comment stream carries `agent_event`
 objects from prior claims and handoffs — that is where a previous agent's
 partial progress lives.
 
+**Verify the premise before writing code.** The Story is a claim about the
+repository written by someone without your view of it. Before implementing:
+
+- Find the code path or reproduce the bug the Story describes. If the
+  described behavior does not exist, stop.
+- Confirm the files, functions, fields, and flags it names exist and behave as
+  stated.
+- Trace the requested change to the Goal. A change can satisfy every
+  acceptance criterion and still not fix the cited problem.
+- If the Story prescribes a guard, fallback, retry, or default, look one level
+  upstream for the real cause.
+- Check nearby tests, invariants, and ADRs for a deliberate decision the Story
+  contradicts.
+
+The threshold for stopping is repository evidence that contradicts the Story,
+not a preference for a different approach. Every `complete` and `handoff`
+summary starts with a `Premise:` line: `verified` with what you checked,
+`assumed` with the assumption, or `disputed` with the evidence. If a
+`premise-check` skill is installed, read it for the full checklist and worked
+examples.
+
 ### Discovering work mid-implementation
 
-This is the case the graph exists for. Three shapes:
+This is the case the graph exists for. Four shapes:
+
+**The Story's premise is wrong** — the code contradicts what the Story says is
+happening, or the requested change would not fix the cited problem, or it
+would hide a real bug. Do not implement a workaround and do not `complete`.
+Record the evidence on the Story and release it so the orchestrator can
+rewrite or cancel it:
+
+```sh
+shortcut-agent handoff 456 \
+  --summary 'Premise: disputed — Story says formatInvoice receives null customer; loadInvoice validates it at src/invoice.js:52. Null only reaches it via bulk export (src/export.js:118), which skips validation. A null check here would hide that bug.' \
+  --remaining 'Orchestrator: re-scope to fix validation in bulk export, or confirm the null check is wanted anyway' \
+  --release
+```
+
+If you can see the correct fix and it is clearly within the Epic, also
+`create` a `--related-to 456` Story describing it. Do not silently substitute
+your own fix under the original Story; the graph must reflect what was actually
+decided.
 
 **A blocker you must resolve first** — create it, point it *at* your Story, and
 release yours back to the pool. It will not be re-served until the blocker is
@@ -268,6 +322,13 @@ shortcut-agent claims --stale     # in-flight work nobody has touched recently
 whether the graph is stalled on real work or on a bad edge. If `ready` is empty
 and `blocked` is not, the critical path is the blocker set — schedule that first.
 
+Watch `recent` for handoffs whose summary starts with `Premise: disputed`. A
+disputed Story is back in `ready` and will be served to the next worker
+unchanged unless you act. Read the evidence, then either `edit` the description
+to reflect what the code actually does, re-scope it toward the real cause, or
+`cancel` it. Do not overrule a dispute without checking the cited file
+yourself.
+
 ### Recovering stale claims
 
 A worker that dies holding a claim removes its Story from the queue permanently:
@@ -303,6 +364,11 @@ self-contained. Use this structure:
 ## Goal
 One sentence: what must be true when this is done.
 
+## Observed problem
+What is happening today, how you know, and how to see it yourself. A failing
+command, a log line, a reproduction path. This is the claim the worker will
+verify before implementing, so make it checkable.
+
 ## Context
 Why this exists and what decision has already been made. Link the ADR/PR/thread.
 
@@ -315,6 +381,11 @@ The exact command that proves it: `npm test -- cache`
 ## Pointers
 src/cache.js:88 — current key construction
 ```
+
+Keep the observed problem separate from the requested change. A Story that
+only says "do X" gives the worker nothing to verify, so the worker will do X
+even when X is wrong. A Story that says "Y happens, here is how to see it"
+lets the worker catch a stale or mistaken premise before code is written.
 
 Pass it with `--description-file ./story.md`, or pipe it:
 
@@ -379,6 +450,14 @@ plan is wrong.
 - **Workers rewiring the graph.** Concurrent edge edits produce a shape nobody
   designed. Honor the locality rule.
 - **Thin descriptions.** The implementing agent cannot ask follow-up questions.
+- **Implementing a Story the code disproves.** The worker matched every
+  acceptance criterion and shipped a defect, because the Story described a bug
+  that does not exist, named the wrong cause, or contradicted a deliberate
+  decision. Verify the premise first; dispute and release instead of building
+  a workaround.
+- **Re-serving a disputed Story unchanged.** The next worker repeats the same
+  investigation or, worse, implements it anyway. The orchestrator rewrites,
+  re-scopes, or cancels before it returns to the pool.
 - **Dying while holding a claim.** The Story stays owned and leaves the queue
   forever. Always `handoff --release` on the way out; the orchestrator finds the
   rest with `claims --stale` and recovers them with `release --force`.
@@ -389,3 +468,5 @@ plan is wrong.
 
 - `references/commands.md` — full verified command and flag reference
 - `references/roles.md` — copy-pasteable orchestrator and worker role prompts
+- the `premise-check` skill, when installed — checklist, decision rule, and
+  worked examples for verifying a Story before implementing it
