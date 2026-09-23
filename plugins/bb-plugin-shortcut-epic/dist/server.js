@@ -16940,6 +16940,21 @@ var ownedEpicSchema = external_exports.object({
 var ownedEpicsResponseSchema = external_exports.object({
   epics: external_exports.array(ownedEpicSchema)
 }).strict();
+var executionSelectionSchema = external_exports.object({
+  providerId: external_exports.string().min(1),
+  model: external_exports.string().min(1),
+  reasoningLevel: external_exports.enum([
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "ultracode",
+    "max",
+    "ultra"
+  ]),
+  serviceTier: external_exports.enum(["default", "fast"]).optional()
+}).strict();
 var rpcContract = defineRpcContract({
   listOwnedEpics: {
     input: external_exports.object({ projectId: external_exports.string().nullable() }).strict(),
@@ -16959,11 +16974,16 @@ var rpcContract = defineRpcContract({
     }).strict(),
     output: storyDetailSchema
   },
+  executionDefaults: {
+    input: external_exports.object({ projectId: external_exports.string().nullable() }).strict(),
+    output: executionSelectionSchema.nullable()
+  },
   startWork: {
     input: external_exports.object({
       storyId: external_exports.number().int().positive(),
       projectId: external_exports.string().nullable(),
-      epicId: external_exports.number().int().positive().nullable().optional()
+      epicId: external_exports.number().int().positive().nullable().optional(),
+      execution: executionSelectionSchema.nullable().optional()
     }).strict(),
     output: external_exports.object({
       threadId: external_exports.string().min(1),
@@ -17018,6 +17038,20 @@ function cliFailure(payload, fallback) {
     return new Error(String(error51.message));
   }
   return new Error(fallback);
+}
+function spawnExecutionArgs(execution) {
+  return {
+    providerId: execution.providerId,
+    model: execution.model,
+    reasoningLevel: execution.reasoningLevel,
+    ...execution.serviceTier ? { serviceTier: execution.serviceTier } : {},
+    executionInputSources: {
+      providerId: "explicit",
+      model: "explicit",
+      reasoningLevel: "explicit",
+      ...execution.serviceTier ? { serviceTier: "explicit" } : {}
+    }
+  };
 }
 function startWorkPrompt({
   storyId,
@@ -17528,7 +17562,22 @@ bb integration: project scope and API origin are server-controlled; init, --conf
         }))
       };
     },
-    async startWork({ storyId, projectId, epicId }) {
+    async executionDefaults({ projectId }) {
+      const current = await settings.get();
+      const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const defaults = await bb.sdk.projects.defaultExecutionOptions({
+        projectId: configured.project.id
+      });
+      if (!defaults) return null;
+      const parsed = executionSelectionSchema.safeParse({
+        providerId: defaults.providerId,
+        model: defaults.model,
+        reasoningLevel: defaults.reasoningLevel,
+        serviceTier: defaults.serviceTier
+      });
+      return parsed.success ? parsed.data : null;
+    },
+    async startWork({ storyId, projectId, epicId, execution }) {
       const current = await settings.get();
       const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
       if (!token) {
@@ -17561,6 +17610,7 @@ bb integration: project scope and API origin are server-controlled; init, --conf
         projectId: configured.project.id,
         environment: { type: "project-default" },
         title: `sc-${storyId}: ${title}`,
+        ...execution ? spawnExecutionArgs(execution) : {},
         prompt: startWorkPrompt({
           storyId,
           title,

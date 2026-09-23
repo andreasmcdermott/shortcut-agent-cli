@@ -481,6 +481,9 @@ describe("Shortcut Agent plugin backend", () => {
       title?: string;
       prompt?: string;
       environment?: { type: string };
+      providerId?: string;
+      model?: string;
+      executionInputSources?: Record<string, string>;
     }[] = [];
     const { bb, harness } = createFakePluginHost({
       pluginId: "shortcut-epic",
@@ -513,6 +516,12 @@ describe("Shortcut Agent plugin backend", () => {
       storyId: 7,
       projectId: "proj_1",
       epicId: 42,
+      execution: {
+        providerId: "claude-code",
+        model: "claude-opus-5",
+        reasoningLevel: "high",
+        serviceTier: "fast",
+      },
     });
     expect(started).toMatchObject({ threadId: "thread_new", storyId: 7, title: "Claim me" });
     expect(spawned).toHaveLength(1);
@@ -520,6 +529,16 @@ describe("Shortcut Agent plugin backend", () => {
       projectId: "proj_1",
       environment: { type: "project-default" },
       title: "sc-7: Claim me",
+      providerId: "claude-code",
+      model: "claude-opus-5",
+      reasoningLevel: "high",
+      serviceTier: "fast",
+      executionInputSources: {
+        providerId: "explicit",
+        model: "explicit",
+        reasoningLevel: "explicit",
+        serviceTier: "explicit",
+      },
     });
     const prompt = String(spawned[0]!.prompt);
     expect(prompt).toContain("Implement the parser.");
@@ -572,6 +591,52 @@ describe("Shortcut Agent plugin backend", () => {
       }),
     ).rejects.toThrow(/Enable agent mutations/);
     expect(spawned).toEqual([]);
+
+    await harness.lifecycle.dispose();
+  });
+
+  it("seeds the execution picker from the bb project defaults", async () => {
+    const project = {
+      id: "proj_1",
+      kind: "standard" as const,
+      name: "Agent project",
+      gitRemoteUrl: null,
+      createdAt: 1,
+      updatedAt: 1,
+      sources: [],
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "shortcut-epic",
+      settings: { apiToken: "secret-token", enableAgentMutations: true },
+      sdk: {
+        projects: {
+          get: async () => project,
+          fileContent: async () => ({
+            content: JSON.stringify({ workspace: "acme", epic_id: 42 }),
+            contentEncoding: "utf8" as const,
+            mimeType: "application/json",
+            sizeBytes: 100,
+          }),
+          defaultExecutionOptions: async () => ({
+            providerId: "claude-code",
+            model: "claude-opus-5",
+            reasoningLevel: "high" as const,
+            serviceTier: "default" as const,
+            permissionMode: "auto" as const,
+          }),
+        },
+      },
+    });
+    await plugin(bb);
+
+    await expect(
+      harness.behavior.callRpc("executionDefaults", { projectId: "proj_1" }),
+    ).resolves.toEqual({
+      providerId: "claude-code",
+      model: "claude-opus-5",
+      reasoningLevel: "high",
+      serviceTier: "default",
+    });
 
     await harness.lifecycle.dispose();
   });

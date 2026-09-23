@@ -111,6 +111,26 @@ const ownedEpicsResponseSchema = z
 
 export type OwnedEpic = z.infer<typeof ownedEpicSchema>;
 
+const executionSelectionSchema = z
+  .object({
+    providerId: z.string().min(1),
+    model: z.string().min(1),
+    reasoningLevel: z.enum([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "ultracode",
+      "max",
+      "ultra",
+    ]),
+    serviceTier: z.enum(["default", "fast"]).optional(),
+  })
+  .strict();
+
+export type ExecutionSelection = z.infer<typeof executionSelectionSchema>;
+
 export const rpcContract = defineRpcContract({
   listOwnedEpics: {
     input: z.object({ projectId: z.string().nullable() }).strict(),
@@ -134,12 +154,17 @@ export const rpcContract = defineRpcContract({
       .strict(),
     output: storyDetailSchema,
   },
+  executionDefaults: {
+    input: z.object({ projectId: z.string().nullable() }).strict(),
+    output: executionSelectionSchema.nullable(),
+  },
   startWork: {
     input: z
       .object({
         storyId: z.number().int().positive(),
         projectId: z.string().nullable(),
         epicId: z.number().int().positive().nullable().optional(),
+        execution: executionSelectionSchema.nullable().optional(),
       })
       .strict(),
     output: z
@@ -212,6 +237,23 @@ function cliFailure(payload: Record<string, unknown>, fallback: string) {
     return new Error(String((error as { message: unknown }).message));
   }
   return new Error(fallback);
+}
+
+function spawnExecutionArgs(execution: ExecutionSelection) {
+  // bb drops a requested provider or model that carries no provenance and
+  // re-derives it from the project defaults, so every field needs a source.
+  return {
+    providerId: execution.providerId,
+    model: execution.model,
+    reasoningLevel: execution.reasoningLevel,
+    ...(execution.serviceTier ? { serviceTier: execution.serviceTier } : {}),
+    executionInputSources: {
+      providerId: "explicit",
+      model: "explicit",
+      reasoningLevel: "explicit",
+      ...(execution.serviceTier ? { serviceTier: "explicit" as const } : {}),
+    },
+  } as const;
 }
 
 function startWorkPrompt({
@@ -802,7 +844,23 @@ export default async function plugin(bb: BbPluginApi) {
       };
     },
 
-    async startWork({ storyId, projectId, epicId }) {
+    async executionDefaults({ projectId }) {
+      const current = await settings.get();
+      const configured = await resolveConfiguredProject(bb, projectId, current.project);
+      const defaults = await bb.sdk.projects.defaultExecutionOptions({
+        projectId: configured.project.id,
+      });
+      if (!defaults) return null;
+      const parsed = executionSelectionSchema.safeParse({
+        providerId: defaults.providerId,
+        model: defaults.model,
+        reasoningLevel: defaults.reasoningLevel,
+        serviceTier: defaults.serviceTier,
+      });
+      return parsed.success ? parsed.data : null;
+    },
+
+    async startWork({ storyId, projectId, epicId, execution }) {
       const current = await settings.get();
       const token = current.apiToken ?? process.env.SHORTCUT_API_TOKEN;
       if (!token) {
@@ -838,6 +896,7 @@ export default async function plugin(bb: BbPluginApi) {
         projectId: configured.project.id,
         environment: { type: "project-default" },
         title: `sc-${storyId}: ${title}`,
+        ...(execution ? spawnExecutionArgs(execution) : {}),
         prompt: startWorkPrompt({
           storyId,
           title,

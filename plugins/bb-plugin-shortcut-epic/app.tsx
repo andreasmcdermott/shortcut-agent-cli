@@ -9,12 +9,14 @@ import {
 import {
   Markdown,
   definePluginApp,
+  experimental_ProviderModelPicker as ProviderModelPicker,
   useBbContext,
   useBbNavigate,
   useRpc,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
 import type {
+  ExecutionSelection,
   GraphResponse,
   OwnedEpic,
   StoryDetail,
@@ -47,6 +49,17 @@ const OWNED_EPICS_CACHE_VERSION = 1;
 const OWNED_EPICS_CACHE_TTL_MS = 5 * 60_000;
 const GRAPH_CACHE_VERSION = 1;
 const GRAPH_CACHE_TTL_MS = 5 * 60_000;
+
+const REASONING_LEVELS = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "ultracode",
+  "max",
+  "ultra",
+] as const;
 
 const STATUS_LABELS: Record<NodeStatus, string> = {
   ready: "Ready",
@@ -355,11 +368,110 @@ function StoryDetailsDialog({
   );
 }
 
-function Count({ label, value, tone }: { label: string; value: number; tone?: NodeStatus }) {
+function StartWorkDialog({
+  node,
+  projectId,
+  starting,
+  onOpenChange,
+  onStart,
+}: {
+  node: GraphNode | null;
+  projectId: string | null;
+  starting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onStart: (execution: ExecutionSelection | null) => void;
+}) {
+  const rpc = useRpc<typeof rpcContract>();
+  const [execution, setExecution] = useState<ExecutionSelection | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!node) {
+      setExecution(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    const remembered = readRememberedExecution(projectId);
+    if (remembered) {
+      setExecution(remembered);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    let current = true;
+    setExecution(null);
+    setError(null);
+    setLoading(true);
+    void rpc
+      .call("executionDefaults", { projectId })
+      .then((result) => {
+        if (current) setExecution(result);
+      })
+      .catch((cause) => {
+        if (current) setError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [node, projectId, rpc]);
+
+  function start() {
+    if (execution) rememberExecution(projectId, execution);
+    onStart(execution);
+  }
+
+  return (
+    <Dialog open={node !== null} onOpenChange={onOpenChange}>
+      <DialogContent aria-describedby="shortcut-agent-start-work-summary">
+        <DialogHeader>
+          <DialogDescription id="shortcut-agent-start-work-summary">
+            sc-{node?.id} · the new thread claims the Story itself
+          </DialogDescription>
+          <DialogTitle>{node?.title ?? "Start work"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+          {loading ? (
+            <div className="flex min-h-16 items-center gap-2 text-sm text-muted-foreground">
+              <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
+              Loading execution defaults…
+            </div>
+          ) : execution ? (
+            <ProviderModelPicker value={execution} onChange={setExecution} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {error ??
+                "bb has no execution defaults for this project yet. The thread will start on bb's own defaults."}
+            </p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border pt-4">
+          <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" disabled={starting || loading} onClick={start}>
+            {starting ? "Starting…" : "Start work"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Count({ label, value, tone }: { label: string; value: number | null; tone?: NodeStatus }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className={cn("text-sm font-semibold", tone && statusClass(tone).split(" ")[1])}>
-        {value}
+      <span className={cn("text-xs font-semibold tabular-nums", tone && statusClass(tone).split(" ")[1])}>
+        {value ?? "—"}
       </span>
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
@@ -397,6 +509,44 @@ function forgetEpic(projectId: string | null) {
     window.localStorage.removeItem(epicPreferenceKey(projectId));
   } catch {
     // The graph still works when browser storage is unavailable.
+  }
+}
+
+function executionPreferenceKey(projectId: string | null) {
+  return `shortcut-agent:last-execution:${projectId ?? "default"}`;
+}
+
+function isExecutionSelection(value: unknown): value is ExecutionSelection {
+  if (typeof value !== "object" || value === null) return false;
+  const execution = value as Partial<ExecutionSelection>;
+  return (
+    typeof execution.providerId === "string" &&
+    execution.providerId.length > 0 &&
+    typeof execution.model === "string" &&
+    execution.model.length > 0 &&
+    REASONING_LEVELS.includes(execution.reasoningLevel as (typeof REASONING_LEVELS)[number]) &&
+    (execution.serviceTier === undefined ||
+      execution.serviceTier === "default" ||
+      execution.serviceTier === "fast")
+  );
+}
+
+function readRememberedExecution(projectId: string | null) {
+  try {
+    const value = window.localStorage.getItem(executionPreferenceKey(projectId));
+    if (!value) return null;
+    const parsed: unknown = JSON.parse(value);
+    return isExecutionSelection(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberExecution(projectId: string | null, execution: ExecutionSelection) {
+  try {
+    window.localStorage.setItem(executionPreferenceKey(projectId), JSON.stringify(execution));
+  } catch {
+    // Starting work still works when browser storage is unavailable.
   }
 }
 
@@ -604,37 +754,38 @@ function EpicPicker({
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="shortcut-agent-owned-epic" className="text-xs text-muted-foreground">
-          Owned Epic
-        </label>
-        <select
-          id="shortcut-agent-owned-epic"
-          className="h-8 min-w-56 max-w-80 rounded-md border border-input bg-background px-2 text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          value={selectedOwnedEpic}
-          disabled={ownedEpicsLoading || ownedEpics.length === 0}
-          onChange={(event) => onSelectOwned(event.target.value)}
-        >
-          <option value="">
-            {ownedEpicsLoading
-              ? "Loading owned Epics…"
-              : ownedEpics.length === 0
-                ? "No active owned Epics"
-                : "Choose an active Epic…"}
-          </option>
-          {ownedEpics.map((epic) => (
-            <option key={epic.id} value={epic.id}>
-              {epic.name} (epic-{epic.id})
+        <div className="flex min-w-0 items-center gap-2">
+          <label htmlFor="shortcut-agent-owned-epic" className="shrink-0 text-xs text-muted-foreground">
+            Owned Epic
+          </label>
+          <select
+            id="shortcut-agent-owned-epic"
+            className="h-8 w-64 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={selectedOwnedEpic}
+            disabled={ownedEpicsLoading || ownedEpics.length === 0}
+            onChange={(event) => onSelectOwned(event.target.value)}
+          >
+            <option value="">
+              {ownedEpicsLoading
+                ? "Loading owned Epics…"
+                : ownedEpics.length === 0
+                  ? "No active owned Epics"
+                  : "Choose an active Epic…"}
             </option>
-          ))}
-        </select>
-        <span className="text-xs text-muted-foreground">or</span>
+            {ownedEpics.map((epic) => (
+              <option key={epic.id} value={epic.id}>
+                {epic.name} (epic-{epic.id})
+              </option>
+            ))}
+          </select>
+        </div>
         <form className="flex items-center gap-2" onSubmit={onSubmit}>
           <label htmlFor="shortcut-agent-epic-id" className="text-xs text-muted-foreground">
             Epic ID
           </label>
           <input
             id="shortcut-agent-epic-id"
-            className="h-8 w-28 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-8 w-24 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             type="number"
             min="1"
             step="1"
@@ -696,6 +847,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [startingStoryId, setStartingStoryId] = useState<number | null>(null);
   const [selectedStory, setSelectedStory] = useState<GraphNode | null>(null);
+  const [pendingStartStory, setPendingStartStory] = useState<GraphNode | null>(null);
   const [zoom, setZoom] = useState(1);
   const graphScrollerRef = useRef<HTMLDivElement>(null);
 
@@ -743,10 +895,16 @@ function EpicGraph({ subPath }: { subPath: string }) {
   }, [projectId, rpc]);
 
   const startWork = useCallback(
-    async (storyId: number, epicId: number) => {
+    async (storyId: number, epicId: number, execution: ExecutionSelection | null) => {
       setStartingStoryId(storyId);
       try {
-        const result = await rpc.call("startWork", { storyId, projectId, epicId });
+        const result = await rpc.call("startWork", {
+          storyId,
+          projectId,
+          epicId,
+          execution,
+        });
+        setPendingStartStory(null);
         toast.success(`Opened a bb thread for sc-${result.storyId}`);
         navigate.toThread(result.threadId);
       } catch (cause) {
@@ -890,71 +1048,32 @@ function EpicGraph({ subPath }: { subPath: string }) {
     );
   };
 
-  if (!data && loading) {
-    return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="border-b border-border px-4 py-3 md:px-5">
-          <div className="text-sm font-medium">Shortcut Agent</div>
-          <div className="mt-2">{picker}</div>
-        </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
-          Loading Epic graph…
-        </div>
-      </div>
-    );
-  }
-
-  if (!data && error) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="max-w-lg rounded-lg border border-destructive/30 bg-destructive/5 p-5">
-          <div className="flex items-center gap-2 font-medium text-destructive">
-            <Icon name="AlertTriangle" aria-hidden="true" />
-            Epic graph unavailable
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-          <div className="mt-4">{picker}</div>
-          <Button className="mt-4" size="sm" variant="outline" onClick={() => void load()}>
-            <Icon name="RotateCcw" aria-hidden="true" />
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const warnings = [
-    ...data.warnings,
-    ...(layout.cyclicNodeIds.length > 0
-      ? [`Dependency cycle detected among Stories ${layout.cyclicNodeIds.join(", ")}.`]
-      : []),
-  ];
-
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-border px-4 py-3 md:px-5">
+  const header = (
+    <div className="@container shrink-0 border-b border-border px-4 py-3 md:px-5">
+      <div className="grid grid-cols-1 items-center gap-x-6 gap-y-2 @min-[72rem]:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{data.epic.name}</span>
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">epic-{data.epic.id}</span>
+            <span className="truncate text-sm font-medium" title={data?.epic.name}>
+              {data?.epic.name ?? "Shortcut Agent"}
+            </span>
+            {data ? (
+              <span className="shrink-0 font-mono text-xs text-muted-foreground">epic-{data.epic.id}</span>
+            ) : null}
           </div>
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            {data.project.name} · {data.configPath} · prerequisite → dependent
+          <div className="mt-0.5 h-4 truncate text-xs text-muted-foreground" title={data?.configPath}>
+            {data ? `${data.project.name} · prerequisite → dependent` : null}
           </div>
-          <div className="mt-2">{picker}</div>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <Count label="ready" value={data.counts.ready} tone="ready" />
-          <Count label="active" value={data.counts.active} tone="active" />
-          <Count label="blocked" value={data.counts.blocked} tone="blocked" />
-          <Count label="done" value={data.counts.done} tone="done" />
+        <div className="flex items-center gap-4 @min-[72rem]:justify-end" aria-label="Story counts">
+          <Count label="ready" value={data?.counts.ready ?? null} tone="ready" />
+          <Count label="active" value={data?.counts.active ?? null} tone="active" />
+          <Count label="blocked" value={data?.counts.blocked ?? null} tone="blocked" />
+          <Count label="done" value={data?.counts.done ?? null} tone="done" />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0">{picker}</div>
+        <div className="flex flex-wrap items-center gap-2 @min-[72rem]:justify-end">
           <div
-            className="flex items-center rounded-md border border-border bg-background p-0.5"
+            className="flex h-8 items-center rounded-md bg-muted/40 px-0.5"
             role="group"
             aria-label="Graph zoom"
           >
@@ -964,7 +1083,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
               variant="ghost"
               className="h-7 w-7"
               aria-label="Zoom out"
-              disabled={zoom <= MIN_ZOOM}
+              disabled={!data || zoom <= MIN_ZOOM}
               onClick={zoomOut}
             >
               <span aria-hidden="true">−</span>
@@ -981,37 +1100,38 @@ function EpicGraph({ subPath }: { subPath: string }) {
               variant="ghost"
               className="h-7 w-7"
               aria-label="Zoom in"
-              disabled={zoom >= MAX_ZOOM}
+              disabled={!data || zoom >= MAX_ZOOM}
               onClick={zoomIn}
             >
               <span aria-hidden="true">+</span>
             </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-7" onClick={fitGraph}>
+            <Button type="button" size="sm" variant="ghost" className="h-7" disabled={!data} onClick={fitGraph}>
               Fit
             </Button>
           </div>
-          {data.counts.done > 0 ? (
-            <Button
-              size="sm"
-              variant={showCompleted ? "secondary" : "outline"}
-              aria-pressed={showCompleted}
-              onClick={() => setShowCompleted((current) => !current)}
-            >
-              {showCompleted
-                ? "Hide completed"
-                : `Show completed (${data.counts.done})`}
-            </Button>
-          ) : null}
-          {data.epic.url ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!data || data.counts.done === 0}
+            aria-label={showCompleted ? "Hide completed" : `Show completed (${data?.counts.done ?? 0})`}
+            aria-pressed={showCompleted}
+            onClick={() => setShowCompleted((current) => !current)}
+          >
+            Completed
+          </Button>
+          {data?.epic.url ? (
             <Button asChild size="sm" variant="ghost">
               <a href={data.epic.url} target="_blank" rel="noreferrer">
                 Open Epic
               </a>
             </Button>
-          ) : null}
+          ) : (
+            <Button size="sm" variant="ghost" disabled>Open Epic</Button>
+          )}
           <Button
             size="icon"
-            variant="outline"
+            variant="ghost"
+            className="h-8 w-8"
             aria-label="Refresh Epic graph"
             disabled={loading}
             onClick={() => void load()}
@@ -1020,6 +1140,54 @@ function EpicGraph({ subPath }: { subPath: string }) {
           </Button>
         </div>
       </div>
+    </div>
+  );
+
+  if (!data && loading) {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        {header}
+        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Icon name="Spinner" className="animate-spin" aria-hidden="true" />
+          Loading Epic graph…
+        </div>
+      </div>
+    );
+  }
+
+  if (!data && error) {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        {header}
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <div className="max-w-lg rounded-lg border border-destructive/30 bg-destructive/5 p-5">
+            <div className="flex items-center gap-2 font-medium text-destructive">
+              <Icon name="AlertTriangle" aria-hidden="true" />
+              Epic graph unavailable
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+            <Button className="mt-4" size="sm" variant="outline" onClick={() => void load()}>
+              <Icon name="RotateCcw" aria-hidden="true" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const warnings = [
+    ...data.warnings,
+    ...(layout.cyclicNodeIds.length > 0
+      ? [`Dependency cycle detected among Stories ${layout.cyclicNodeIds.join(", ")}.`]
+      : []),
+  ];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      {header}
 
       {error || warnings.length > 0 ? (
         <div className="border-b border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground md:px-5">
@@ -1094,7 +1262,7 @@ function EpicGraph({ subPath }: { subPath: string }) {
                     openInPlugin={openStoriesInPlugin}
                     starting={startingStoryId === node.id}
                     onOpen={() => setSelectedStory(node)}
-                    onStartWork={() => void startWork(node.id, data.epic.id)}
+                    onStartWork={() => setPendingStartStory(node)}
                   />
                 </div>
               </foreignObject>
@@ -1107,6 +1275,17 @@ function EpicGraph({ subPath }: { subPath: string }) {
         projectId={projectId}
         onOpenChange={(open) => {
           if (!open) setSelectedStory(null);
+        }}
+      />
+      <StartWorkDialog
+        node={pendingStartStory}
+        projectId={projectId}
+        starting={pendingStartStory !== null && startingStoryId === pendingStartStory.id}
+        onOpenChange={(open) => {
+          if (!open && startingStoryId === null) setPendingStartStory(null);
+        }}
+        onStart={(execution) => {
+          if (pendingStartStory) void startWork(pendingStartStory.id, data.epic.id, execution);
         }}
       />
     </div>
