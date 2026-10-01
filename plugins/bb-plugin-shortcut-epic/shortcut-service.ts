@@ -1,10 +1,10 @@
 import { Buffer } from "node:buffer";
 import type { BbPluginApi, PluginCliContext, PluginAgentToolResult } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { parseArgv, integer, option, text } from "../../src/args.js";
-import { ShortcutClient } from "../../src/client.js";
-import { executeCommand } from "../../src/commands.js";
-import { AppError, configError, toErrorPayload } from "../../src/errors.js";
+import { parseArgv, integer, option, text } from "./vendor/shortcut-cli/args.js";
+import { ShortcutClient } from "./vendor/shortcut-cli/client.js";
+import { executeCommand } from "./vendor/shortcut-cli/commands.js";
+import { AppError, configError, toErrorPayload } from "./vendor/shortcut-cli/errors.js";
 
 export const CONFIG_FILENAME = ".shortcut-agent.json";
 

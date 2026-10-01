@@ -52,6 +52,12 @@ Both are path installs: bb registers the working directory in place. Use
 `bb plugin dev` during development so frontend saves rebuild and reload
 automatically.
 
+BB 0.44 requires server imports to stay within the plugin directory. The
+checked-in `vendor/shortcut-cli/` is generated from the repository's `src/`.
+After changing shared CLI code, run `npm run sync:plugin` at the repository
+root before reloading the plugin. `npm run build` in the plugin also syncs it.
+Edit `src/` rather than the generated copy; the root tests check that they match.
+
 Install the plugin from Git with the collection entry:
 
 ```sh

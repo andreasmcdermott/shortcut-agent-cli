@@ -12,6 +12,7 @@
     "skills"
   ],
   "scripts": {
+    "sync:plugin": "node scripts/sync-plugin-cli.js",
     "test": "node --test",
     "lint": "node --check bin/shortcut-agent.js && node --check src/*.js && node --check test/*.js"
   },

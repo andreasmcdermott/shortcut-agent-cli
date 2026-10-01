@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import { createFakePluginHost, makePluginAgentConfigurationContext } from "@get-bb/plugin-sdk/testing";
 import plugin, { type GraphResponse } from "./server.js";
 
 function json(body: unknown) {
@@ -11,6 +11,7 @@ function json(body: unknown) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("Shortcut Agent plugin backend", () => {
@@ -236,6 +237,7 @@ describe("Shortcut Agent plugin backend", () => {
   });
 
   it("reports missing token as a configuration state", async () => {
+    vi.stubEnv("SHORTCUT_API_TOKEN", undefined);
     const { bb, harness } = createFakePluginHost({
       pluginId: "shortcut-epic",
     });
@@ -278,35 +280,12 @@ describe("Shortcut Agent plugin backend", () => {
     });
     await plugin(bb);
 
-    const context = {
-      thread: { id: "thread-1", title: null, parentThreadId: null, sourceThreadId: null },
-      project: { id: "proj_1", kind: "standard" as const, name: "Agent project", gitRemoteUrl: null },
-      environment: {
-        id: "env-1",
-        name: null,
-        path: "/repo",
-        workspaceProvisionType: "unmanaged" as const,
-        branchName: "main",
-      },
+    const context = makePluginAgentConfigurationContext({
+      thread: { id: "thread-1" },
+      project: { id: "proj_1", name: "Agent project" },
+      environment: { id: "env-1", path: "/repo", branchName: "main" },
       host: { id: "host-1", name: "Local" },
-      provider: {
-        id: "codex",
-        model: "test",
-        capabilities: {
-          supportsServiceTier: false,
-          supportsNativeUserQuestion: false,
-          fork: "none" as const,
-          supportsManualCompaction: false,
-          supportsThreadArchive: false,
-          supportsThreadRename: false,
-          supportsWorkflows: false,
-          permissionModes: ["full" as const],
-          reasoningLevels: ["medium"],
-        },
-      },
-      sideChat: false,
-      origin: { kind: null, pluginId: null },
-    };
+    });
     const readOnly = await harness.behavior.resolveAgentConfiguration(context);
     expect(readOnly.tools.map((tool) => tool.name)).toEqual([
       "shortcut_agent_context",

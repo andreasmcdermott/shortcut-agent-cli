@@ -1,19 +1,19 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { parseArgv, flag } from "../../src/args.js";
+import { parseArgv, flag } from "./vendor/shortcut-cli/args.js";
 import {
   ShortcutClient,
   unwrapEntities,
   unwrapEntity,
-} from "../../src/client.js";
-import { commandHelp, globalHelp } from "../../src/help.js";
-import { formatHuman, VERSION } from "../../src/main.js";
+} from "./vendor/shortcut-cli/client.js";
+import { commandHelp, globalHelp } from "./vendor/shortcut-cli/help.js";
+import { formatHuman, VERSION } from "./vendor/shortcut-cli/main.js";
 import {
   classifyStories,
   stateIndex,
   storyState,
   summarizeStory,
-} from "../../src/domain.js";
+} from "./vendor/shortcut-cli/domain.js";
 import type { GraphEdge, GraphNode, NodeStatus } from "./graph.js";
 import {
   CONFIG_FILENAME,
